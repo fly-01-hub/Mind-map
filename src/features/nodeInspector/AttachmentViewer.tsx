@@ -29,7 +29,7 @@ export function AttachmentViewer({ attachment, onClose }: { attachment?: Attachm
     <Dialog.Root open={Boolean(attachment)} onOpenChange={(open) => { if (!open) onClose() }}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="attachment-dialog">
+        <Dialog.Content className="attachment-dialog" aria-describedby={undefined}>
           <header className="viewer-toolbar">
             <Dialog.Title>{attachment?.fileName}</Dialog.Title>
             <div className="viewer-spacer" />

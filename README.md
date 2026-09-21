@@ -9,6 +9,9 @@
 - IndexedDB 自动保存、刷新恢复、50 份历史版本、冲突恢复副本
 - 全文搜索、收藏、嵌套文件夹、拖拽归档、回收站
 - Markdown 导入/导出，以及官方 Mind Elixir 导出插件生成完整 2× PNG
+- PDF.js 论文阅读器：分页渲染、全文搜索、缩放、阅读进度恢复与离线缓存
+- PDF 高亮、下划线和批注；标注可生成思维导图节点并在节点与原文之间双向定位
+- 论文与节点多对多关联、SHA-256 去重，以及包含论文标题、页码、引用和笔记的 Markdown 来源导出
 - Google OAuth、Supabase 数据同步、RLS 和私有 Storage；未配置时自动保持本地模式
 - 预留 AIProvider 接口，当前 Mock Provider 不发送任何网络请求
 
@@ -38,7 +41,7 @@ npm run dev
 ## 3. 配置 Supabase（可选，用于跨设备）
 
 1. 在 [Supabase](https://supabase.com/) 创建项目。
-2. 打开 Supabase 的 SQL Editor，新建查询，完整粘贴并运行 [supabase/schema.sql](supabase/schema.sql)。它会创建 profiles、folders、documents、document_versions、attachments、索引、RLS Policy 和私有 attachments Bucket。
+2. 打开 Supabase 的 SQL Editor，新建查询，完整粘贴并运行 [supabase/schema.sql](supabase/schema.sql)。它会创建文档、附件、论文、批注及关系表，配置索引、RLS Policy，并创建私有 `attachments` 与 `papers` Bucket。
 3. 在 Supabase 项目 Settings → API 中复制 Project URL 与 Anon/Publishable Key。不要使用 Service Role Key。
 4. 把 `.env.example` 复制为 `.env.local`，填写：
 
@@ -85,10 +88,10 @@ npx playwright install chromium
 ## 目录
 
 - `src/adapters/mindmap/`：Mind Elixir 的唯一适配边界
-- `src/features/`：登录、知识库、编辑器和 Node Inspector
+- `src/features/`：登录、知识库、编辑器、Node Inspector 和论文阅读器
 - `src/stores/`：文档、选中、UI、保存与用户状态
 - `src/db/`、`src/repositories/`：Dexie 数据库、迁移和数据访问
-- `src/services/`：云同步、认证、导出和 AI 扩展接口
+- `src/services/`：云同步、认证、PDF 解析、来源导出和 AI 扩展接口
 - `supabase/schema.sql`：完整数据库、RLS 与 Storage 配置
 - `e2e/`：真实浏览器关键流程
 - `docs/`：产品、架构、数据模型、快捷键和限制

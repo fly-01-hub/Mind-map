@@ -5,7 +5,7 @@ import {
   Plus, Redo2, Search, Undo2, X,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { MindMapEngineAdapter, type NodeAnchor } from '../../adapters/mindmap/MindMapEngineAdapter'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
@@ -15,9 +15,12 @@ import { findNode, getBreadcrumbs } from '../../utils/tree'
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
+import { isPdfFile } from '../../repositories/paperRepository'
+import { usePaperStore } from '../../stores/paperStore'
+import { useUserStore } from '../../stores/userStore'
 import { documentRepository } from '../../repositories/documentRepository'
 import { downloadText } from '../../services/export/download'
-import { markdownToTree, treeToMarkdown } from '../../services/export/markdown'
+import { markdownToTree, treeToMarkdown, type MarkdownPaperSources } from '../../services/export/markdown'
 import { searchDocuments } from '../../utils/search'
 import 'mind-elixir/style.css'
 
@@ -35,15 +38,22 @@ const saveLabels = {
 export function MapEditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const canvasRef = useRef<HTMLDivElement>(null)
   const adapterRef = useRef<MindMapEngineAdapter | undefined>(undefined)
   const composingRef = useRef(false)
   const pendingEditRef = useRef<string | undefined>(undefined)
+  const handledNavigationRef = useRef('')
+  const focusedNavigationRef = useRef('')
   const [engineReady, setEngineReady] = useState(false)
   const [nodeAnchor, setNodeAnchor] = useState<NodeAnchor>()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
+  const papers = usePaperStore((state) => state.papers)
+  const paperAnnotations = usePaperStore((state) => state.annotations)
+  const annotationNodeRelations = usePaperStore((state) => state.annotationNodeRelations)
 
   const documents = useDocumentStore((state) => state.documents)
   const document = documents.find((item) => item.id === id)
@@ -59,16 +69,42 @@ export function MapEditorPage() {
   const searchOpen = useUiStore((state) => state.searchOpen)
   const setSearchOpen = useUiStore((state) => state.setSearchOpen)
   const saveStatus = useSaveStore((state) => state.status)
+  const targetNodeId = searchParams.get('nodeId') ?? undefined
 
   const viewRoot = useMemo(() => document && (focusRootId ? findNode(document.root, focusRootId) : document.root), [document, focusRootId])
   const selectedNode = document && selectedNodeId ? findNode(document.root, selectedNodeId) : undefined
   const breadcrumbs = document && focusRootId ? getBreadcrumbs(document.root, focusRootId) : []
   const searchResults = useMemo(() => document ? searchDocuments([document], searchQuery) : [], [document, searchQuery])
+  const markdownPaperSources = useMemo(() => {
+    if (!document) return {}
+    const sources: MarkdownPaperSources = {}
+    for (const relation of annotationNodeRelations.filter((item) => item.documentId === document.id)) {
+      const annotation = paperAnnotations.find((item) => item.id === relation.annotationId)
+      const paper = annotation && papers.find((item) => item.id === annotation.paperId)
+      if (!annotation || !paper) continue
+      ;(sources[relation.nodeId] ??= []).push({
+        paperTitle: paper.title, pageNumber: annotation.pageNumber,
+        selectedText: annotation.selectedText, note: annotation.content,
+      })
+    }
+    return sources
+  }, [annotationNodeRelations, document, paperAnnotations, papers])
 
   useEffect(() => {
     if (id) openDocument(id)
     return () => setFocusRoot(undefined)
   }, [id, openDocument, setFocusRoot])
+
+  useEffect(() => {
+    const navigationKey = `${id ?? ''}:${targetNodeId ?? ''}`
+    if (!document || !targetNodeId || handledNavigationRef.current === navigationKey) return
+    if (!findNode(document.root, targetNodeId)) return
+    handledNavigationRef.current = navigationKey
+    useDocumentStore.getState().revealNode(targetNodeId)
+    setFocusRoot(undefined)
+    setSelectedNode(targetNodeId)
+    setInspectorOpen(true)
+  }, [document, id, setFocusRoot, setInspectorOpen, setSelectedNode, targetNodeId])
 
   useEffect(() => {
     const element = canvasRef.current
@@ -124,6 +160,20 @@ export function MapEditorPage() {
   }, [engineReady, selectedNodeId])
 
   useEffect(() => {
+    if (!engineReady || !viewRoot || !targetNodeId) return
+    const navigationKey = `${id ?? ''}:${targetNodeId}`
+    if (focusedNavigationRef.current === navigationKey) return
+    const path = getBreadcrumbs(viewRoot, targetNodeId)
+    if (!path.length || path.slice(0, -1).some((node) => node.collapsed)) return
+    focusedNavigationRef.current = navigationKey
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
+      adapterRef.current?.reveal(targetNodeId)
+      setNodeAnchor(adapterRef.current?.anchorFor(targetNodeId))
+    }))
+    return () => cancelAnimationFrame(frame)
+  }, [engineReady, id, targetNodeId, viewRoot])
+
+  useEffect(() => {
     const update = () => selectedNodeId && setNodeAnchor(adapterRef.current?.anchorFor(selectedNodeId))
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
@@ -162,8 +212,13 @@ export function MapEditorPage() {
     const target = findNode(useDocumentStore.getState().documents.find((item) => item.id === document.id)?.root ?? document.root, nodeId)
     if (!target) return
     const attachments = []
-    for (const file of Array.from(files)) attachments.push(await attachmentRepository.save(document.id, nodeId, file))
-    useDocumentStore.getState().updateNode(nodeId, { attachments: [...target.attachments, ...attachments] })
+    for (const file of Array.from(files)) {
+      if (isPdfFile(file)) {
+        try { await usePaperStore.getState().uploadAndLink(file, document.id, nodeId, userId) } catch { /* Error is shown in the Inspector. */ }
+      }
+      else attachments.push(await attachmentRepository.save(document.id, nodeId, file))
+    }
+    if (attachments.length) useDocumentStore.getState().updateNode(nodeId, { attachments: [...target.attachments, ...attachments] })
     setSelectedNode(nodeId)
     setInspectorOpen(true)
   }
@@ -230,7 +285,7 @@ export function MapEditorPage() {
           <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" align="end">
             <DropdownMenu.Label className="dropdown-label">导入与导出</DropdownMenu.Label>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setImportOpen(true)}><FileUp size={16} />导入 Markdown</DropdownMenu.Item>
-            <DropdownMenu.Item className="dropdown-item" onSelect={() => downloadText(treeToMarkdown(document.root), `${document.title}.md`, 'text/markdown;charset=utf-8')}><FileDown size={16} />导出 Markdown</DropdownMenu.Item>
+            <DropdownMenu.Item className="dropdown-item" onSelect={() => downloadText(treeToMarkdown(document.root, markdownPaperSources), `${document.title}.md`, 'text/markdown;charset=utf-8')}><FileDown size={16} />导出 Markdown</DropdownMenu.Item>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => void adapterRef.current?.exportPng(document.title).catch(() => window.alert('PNG 导出失败，请收起部分超大内容后重试。'))}><ImageDown size={16} />导出 2× PNG</DropdownMenu.Item>
             <DropdownMenu.Separator className="context-separator" />
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setHistoryOpen(true)}><History size={16} />历史版本</DropdownMenu.Item>

@@ -40,10 +40,12 @@ export const documentRepository = {
         if (deleteError) throw deleteError
       }
     }
-    await appDatabase.transaction('rw', [appDatabase.documents, appDatabase.versions, appDatabase.attachmentBlobs], async () => {
-    await appDatabase.documents.delete(id)
-    await appDatabase.versions.where('documentId').equals(id).delete()
-    await appDatabase.attachmentBlobs.where('documentId').equals(id).delete()
+    await appDatabase.transaction('rw', [appDatabase.documents, appDatabase.versions, appDatabase.attachmentBlobs, appDatabase.nodePaperRelations, appDatabase.annotationNodeRelations], async () => {
+      await appDatabase.documents.delete(id)
+      await appDatabase.versions.where('documentId').equals(id).delete()
+      await appDatabase.attachmentBlobs.where('documentId').equals(id).delete()
+      await appDatabase.nodePaperRelations.where('documentId').equals(id).delete()
+      await appDatabase.annotationNodeRelations.where('documentId').equals(id).delete()
     })
   },
 

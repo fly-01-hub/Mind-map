@@ -5,6 +5,7 @@ import { useDocumentStore } from './stores/documentStore'
 const LoginPage = lazy(() => import('./features/auth/LoginPage').then((module) => ({ default: module.LoginPage })))
 const LibraryPage = lazy(() => import('./features/library/LibraryPage').then((module) => ({ default: module.LibraryPage })))
 const MapEditorPage = lazy(() => import('./features/mindmap/MapEditorPage').then((module) => ({ default: module.MapEditorPage })))
+const PaperReaderPage = lazy(() => import('./features/paper/PaperReaderPage').then((module) => ({ default: module.PaperReaderPage })))
 
 export default function App() {
   const hydrated = useDocumentStore((state) => state.hydrated)
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/map/:id" element={<MapEditorPage />} />
+        <Route path="/paper/:paperId" element={<PaperReaderPage />} />
         <Route path="*" element={<Navigate to="/library" replace />} />
       </Routes>
     </Suspense>

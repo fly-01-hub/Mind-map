@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createNode, duplicateSubtree, findNode, findParent, insertChild, insertSibling,
+  createNode, duplicateSubtree, expandPathToNode, findNode, findParent, insertChild, insertSibling,
   moveSubtree, promoteNode, removeNodeKeepChildren, removeSubtree,
 } from './tree'
 import { useDocumentStore } from '../stores/documentStore'
@@ -64,6 +64,20 @@ describe('tree operations', () => {
     expect(copy?.title).toBe('B')
     expect(copy?.id).not.toBe(ids.b)
     expect(copy?.children[0].id).not.toBe(ids.c)
+  })
+
+  it('expands only the ancestor path needed to reveal a linked node', () => {
+    const { root, ids } = sample()
+    root.collapsed = true
+    root.children[0].collapsed = true
+    root.children[0].children[0].collapsed = true
+    root.children[0].children[0].children[0].collapsed = true
+    const result = expandPathToNode(root, ids.c)
+    expect(result.collapsed).toBe(false)
+    expect(findNode(result, ids.a)?.collapsed).toBe(false)
+    expect(findNode(result, ids.b)?.collapsed).toBe(false)
+    expect(findNode(result, ids.c)?.collapsed).toBe(true)
+    expect(expandPathToNode(root, 'missing')).toBe(root)
   })
 
   it('undoes and redoes a committed tree change', () => {

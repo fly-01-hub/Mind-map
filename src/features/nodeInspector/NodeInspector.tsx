@@ -1,14 +1,18 @@
 import {
-  Bold, Check, Code2, ExternalLink, File, FileImage, FileText, Italic,
-  Link2, Paperclip, Plus, Sigma, Tag, Trash2, Underline, X,
+  Bold, BookOpen, Check, Code2, ExternalLink, File, FileImage, FileText, Italic,
+  Link2, Paperclip, Plus, Quote, Sigma, Tag, Trash2, Underline, Unlink, X,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
+import { isPdfFile } from '../../repositories/paperRepository'
 import { useDocumentStore } from '../../stores/documentStore'
+import { usePaperStore } from '../../stores/paperStore'
+import { useUserStore } from '../../stores/userStore'
 import type { Attachment, NodeData, TaskStatus } from '../../types/mindmap'
 import { AttachmentViewer } from './AttachmentViewer'
 import 'katex/dist/katex.min.css'
@@ -24,7 +28,9 @@ function attachmentIcon(attachment: Attachment) {
 
 export function NodeInspector({ node, documentId, close }: { node?: NodeData; documentId: string; close: () => void }) {
   const updateNode = useDocumentStore((state) => state.updateNode)
+  const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const paperInputRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(node?.title ?? '')
   const [link, setLink] = useState(node?.hyperlink ?? '')
   const [note, setNote] = useState(node?.note ?? '')
@@ -33,6 +39,41 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
   const [tagDraft, setTagDraft] = useState('')
   const [preview, setPreview] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<Attachment>()
+  const [selectedPaperId, setSelectedPaperId] = useState('')
+  const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
+  const papers = usePaperStore((state) => state.papers)
+  const relations = usePaperStore((state) => state.relations)
+  const annotations = usePaperStore((state) => state.annotations)
+  const annotationNodeRelations = usePaperStore((state) => state.annotationNodeRelations)
+  const paperBusy = usePaperStore((state) => state.busy)
+  const paperError = usePaperStore((state) => state.error)
+  const uploadAndLink = usePaperStore((state) => state.uploadAndLink)
+  const linkPaper = usePaperStore((state) => state.linkPaper)
+  const unlinkPaper = usePaperStore((state) => state.unlinkPaper)
+
+  const linkedPapers = useMemo(() => {
+    if (!node) return []
+    const linkedIds = new Set(relations.filter((relation) => relation.documentId === documentId && relation.nodeId === node.id).map((relation) => relation.paperId))
+    return papers.filter((paper) => paper.userId === userId && linkedIds.has(paper.id)).map((paper) => ({
+      ...paper,
+      annotationCount: annotations.filter((annotation) => annotation.paperId === paper.id).length,
+    }))
+  }, [annotations, documentId, node, papers, relations, userId])
+  const availablePapers = useMemo(() => {
+    const linkedIds = new Set(linkedPapers.map((paper) => paper.id))
+    return papers.filter((paper) => paper.userId === userId && !linkedIds.has(paper.id))
+  }, [linkedPapers, papers, userId])
+  const paperSources = useMemo(() => {
+    if (!node) return []
+    return annotationNodeRelations
+      .filter((relation) => relation.documentId === documentId && relation.nodeId === node.id)
+      .flatMap((relation) => {
+        const annotation = annotations.find((item) => item.id === relation.annotationId)
+        const paper = annotation && papers.find((item) => item.id === annotation.paperId)
+        return annotation && paper ? [{ relation, annotation, paper }] : []
+      })
+      .sort((a, b) => a.annotation.pageNumber - b.annotation.pageNumber)
+  }, [annotationNodeRelations, annotations, documentId, node, papers])
 
   if (!node) return (
     <aside className="node-inspector">
@@ -50,8 +91,23 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
   }
   const addAttachments = async (files: FileList | File[]) => {
     const saved: Attachment[] = []
-    for (const file of Array.from(files)) saved.push(await attachmentRepository.save(documentId, node.id, file))
+    try {
+      for (const file of Array.from(files)) {
+        if (isPdfFile(file)) await uploadAndLink(file, documentId, node.id, userId)
+        else saved.push(await attachmentRepository.save(documentId, node.id, file))
+      }
+    } catch {
+      return
+    }
+    if (!saved.length) return
     patch({ attachments: [...node.attachments, ...saved] })
+  }
+  const addPapers = async (files: FileList | File[]) => {
+    try {
+      for (const file of Array.from(files)) await uploadAndLink(file, documentId, node.id, userId)
+    } catch {
+      // The store exposes the user-facing error while preserving successful local uploads.
+    }
   }
   const removeAttachment = async (attachment: Attachment) => {
     await attachmentRepository.softDelete(attachment.id)
@@ -114,11 +170,28 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
           <div className="icon-picker"><button className={!node.icon ? 'active' : ''} aria-label="清除图标" onClick={() => patch({ icon: undefined })}>无</button>{icons.map((icon) => <button key={icon} className={node.icon === icon ? 'active' : ''} aria-label={`设置图标 ${icon}`} onClick={() => patch({ icon })}>{icon}</button>)}</div>
         </section>
 
+        {paperSources.length > 0 && <section className="inspector-block paper-sources-block">
+          <label><Quote size={12} />论文来源 · {paperSources.length}</label>
+          <div className="paper-source-list">{paperSources.map(({ relation, annotation, paper }) => <button key={relation.id} onClick={() => navigate(`/paper/${paper.id}?documentId=${encodeURIComponent(documentId)}&nodeId=${encodeURIComponent(node.id)}&page=${annotation.pageNumber}&annotationId=${encodeURIComponent(annotation.id)}`)} aria-label={`打开来源 ${paper.title} 第 ${annotation.pageNumber} 页`}>
+            <span><strong>{paper.title}</strong><small>第 {annotation.pageNumber} 页 · 点击定位原文</small></span>
+            <blockquote>{annotation.selectedText}</blockquote>
+          </button>)}</div>
+        </section>}
+
+        <section className="inspector-block papers-block">
+          <div className="inspector-label-row"><label><BookOpen size={12} />文献 · {linkedPapers.length}</label><button className="preview-toggle" disabled={paperBusy} onClick={() => paperInputRef.current?.click()}>{paperBusy ? '保存中…' : '上传 PDF'}</button></div>
+          <input ref={paperInputRef} type="file" accept="application/pdf,.pdf" multiple hidden onChange={(event) => { if (event.target.files) void addPapers(event.target.files); event.target.value = '' }} />
+          <div className="attachment-list">{linkedPapers.map((paper) => <div key={paper.id} className="attachment-row paper-row"><button className="attachment-open" onClick={() => navigate(`/paper/${paper.id}?documentId=${encodeURIComponent(documentId)}&nodeId=${encodeURIComponent(node.id)}`)}><FileText size={15} /><span><strong>{paper.title}</strong><small>{paper.pageCount ? `${paper.pageCount} 页 · ` : '页数待读取 · '}{paper.annotationCount} 条标注 · {(paper.fileSize / 1024 / 1024).toFixed(1)} MB</small></span></button><button className="icon-button" aria-label={`解除关联 ${paper.title}`} title="解除当前节点关联，不删除论文" onClick={() => void unlinkPaper(documentId, node.id, paper.id, userId)}><Unlink size={14} /></button></div>)}</div>
+          {!linkedPapers.length && <button className="attachment-drop" disabled={paperBusy} onClick={() => paperInputRef.current?.click()}><BookOpen size={17} /><span>上传 PDF 并关联当前节点</span></button>}
+          {availablePapers.length > 0 && <div className="paper-link-existing"><select aria-label="选择已有论文" value={selectedPaperId} onChange={(event) => setSelectedPaperId(event.target.value)}><option value="">关联已有论文…</option>{availablePapers.map((paper) => <option key={paper.id} value={paper.id}>{paper.title}</option>)}</select><button disabled={!selectedPaperId} onClick={() => { if (!selectedPaperId) return; void linkPaper(documentId, node.id, selectedPaperId, userId).then(() => setSelectedPaperId('')) }}><Plus size={14} />关联</button></div>}
+          {paperError && <p className="paper-error">{paperError}</p>}
+        </section>
+
         <section className="inspector-block attachments-block">
           <div className="inspector-label-row"><label><Paperclip size={12} />附件</label><button className="preview-toggle" onClick={() => fileInputRef.current?.click()}>添加</button></div>
           <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { if (event.target.files) void addAttachments(event.target.files); event.target.value = '' }} />
           <div className="attachment-list">{node.attachments.map((attachment) => <div key={attachment.id} className="attachment-row"><button className="attachment-open" onClick={() => setViewerAttachment(attachment)}>{attachmentIcon(attachment)}<span><strong>{attachment.fileName}</strong><small>{(attachment.size / 1024).toFixed(1)} KB</small></span></button><button className="icon-button" aria-label={`删除附件 ${attachment.fileName}`} onClick={() => void removeAttachment(attachment)}><Trash2 size={14} /></button></div>)}</div>
-          {!node.attachments.length && <button className="attachment-drop" onClick={() => fileInputRef.current?.click()}><Paperclip size={17} /><span>添加 PDF、图片或文件</span></button>}
+          {!node.attachments.length && <button className="attachment-drop" onClick={() => fileInputRef.current?.click()}><Paperclip size={17} /><span>添加图片或其他文件</span></button>}
         </section>
       </div>
       <AttachmentViewer attachment={viewerAttachment} onClose={() => setViewerAttachment(undefined)} />

@@ -11,6 +11,15 @@ interface NodeMetadata {
   style: NodeData['style']
 }
 
+export interface MarkdownPaperSource {
+  paperTitle: string
+  pageNumber: number
+  selectedText: string
+  note: string
+}
+
+export type MarkdownPaperSources = Record<string, MarkdownPaperSource[]>
+
 function label(node: NodeData) {
   const task = node.taskStatus === 'done' ? '[x] ' : node.taskStatus === 'todo' || node.taskStatus === 'doing' ? '[ ] ' : ''
   const title = node.hyperlink ? `[${node.title}](${node.hyperlink})` : node.title
@@ -26,18 +35,28 @@ function metadataLine(node: NodeData) {
   return `<!-- zhijian-node:${encodeURIComponent(JSON.stringify(metadata))} -->`
 }
 
-function writeChildren(nodes: NodeData[], depth: number, lines: string[]) {
+function writePaperSources(nodeId: string, indent: string, lines: string[], paperSources?: MarkdownPaperSources) {
+  for (const source of paperSources?.[nodeId] ?? []) {
+    lines.push(`${indent}> 来源：${source.paperTitle} · Page ${source.pageNumber}`)
+    lines.push(`${indent}> 引用：“${source.selectedText.replace(/\s+/g, ' ').trim()}”`)
+    if (source.note.trim()) lines.push(`${indent}> 我的笔记：${source.note.replace(/\s+/g, ' ').trim()}`)
+  }
+}
+
+function writeChildren(nodes: NodeData[], depth: number, lines: string[], paperSources?: MarkdownPaperSources) {
   for (const node of nodes) {
     const indent = '  '.repeat(depth)
     lines.push(`${indent}- ${label(node)}`)
     lines.push(`${indent}  ${metadataLine(node)}`)
-    writeChildren(node.children, depth + 1, lines)
+    writePaperSources(node.id, `${indent}  `, lines, paperSources)
+    writeChildren(node.children, depth + 1, lines, paperSources)
   }
 }
 
-export function treeToMarkdown(root: NodeData) {
+export function treeToMarkdown(root: NodeData, paperSources?: MarkdownPaperSources) {
   const lines = [`# ${label(root)}`, metadataLine(root), '']
-  writeChildren(root.children, 0, lines)
+  writePaperSources(root.id, '', lines, paperSources)
+  writeChildren(root.children, 0, lines, paperSources)
   return `${lines.join('\n').trim()}\n`
 }
 

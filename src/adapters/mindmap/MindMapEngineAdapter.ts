@@ -115,6 +115,13 @@ export class MindMapEngineAdapter {
     if (element) this.engine.selectNode(element)
   }
 
+  reveal(id: string) {
+    const element = this.safeFind(id)
+    if (!element) return
+    this.engine.selectNode(element)
+    this.engine.scrollIntoView(element, true)
+  }
+
   clearSelection() {
     this.engine.clearSelection()
   }

@@ -4,6 +4,7 @@ import { attachmentRepository } from '../../repositories/attachmentRepository'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
 import { supabase } from './client'
+import { paperSyncService } from './paperSyncService'
 
 interface CloudDocumentRow {
   id: string
@@ -182,6 +183,7 @@ export const cloudSyncService = {
       else if (remote.updated_at > folders[index].updatedAt) folders[index] = fromCloudFolder(remote)
     }
     useDocumentStore.setState({ documents, folders })
+    await paperSyncService.pull(sessionData.session.user.id)
   },
 
   async sync(documents: MindMapDocument[], folders: FolderData[]) {
@@ -201,6 +203,7 @@ export const cloudSyncService = {
         if (ready !== document) await syncOne(ready, userId)
       }
       await syncVersions(syncedDocuments, userId)
+      await paperSyncService.syncPending(userId)
       useSaveStore.getState().setStatus('synced')
     } catch {
       useSaveStore.getState().setStatus('error')

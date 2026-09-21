@@ -24,3 +24,14 @@
 - Shift + Enter：节点内换行
 - Escape：结束编辑
 - 输入法组合期间的 Enter 只确认候选词，不执行节点命令。代码同时检查 `KeyboardEvent.isComposing` 和 `compositionstart/compositionend`。
+
+## PDF 阅读模式
+
+| 快捷键 | 操作 |
+| --- | --- |
+| Ctrl + F | 打开论文全文搜索 |
+| Ctrl + + / Ctrl + = | 放大页面 |
+| Ctrl + - | 缩小页面 |
+| ↑ / ← | 上一页 |
+| ↓ / → | 下一页 |
+| Escape | 关闭搜索或文字选择工具栏 |

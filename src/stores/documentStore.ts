@@ -3,7 +3,7 @@ import { mockDocuments } from '../data/mockDocuments'
 import type { ClipboardPayload, FolderData, MindMapDocument, NodeData } from '../types/mindmap'
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
-  findParent, mapNode, promoteNode, removeNodeKeepChildren, removeSubtree, replaceSubtree,
+  expandPathToNode, findParent, mapNode, promoteNode, removeNodeKeepChildren, removeSubtree, replaceSubtree,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
 
@@ -38,6 +38,7 @@ export interface DocumentState {
   removeOnly: (nodeId: string) => void
   duplicate: (nodeId: string) => string | undefined
   updateNode: (nodeId: string, patch: Partial<NodeData>) => void
+  revealNode: (nodeId: string) => void
   toggleSiblingChildren: (nodeId: string) => void
   copy: (nodeId: string) => void
   cut: (nodeId: string) => void
@@ -58,6 +59,7 @@ function updateActive(
   const current = state.documents.find((document) => document.id === id)
   if (!current) return {}
   const next = transform(current)
+  if (next === current) return {}
   const histories = { ...state.histories }
   if (recordHistory) {
     const history = histories[id] ?? { past: [], future: [] }
@@ -163,6 +165,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
   updateNode: (nodeId, patch) => set((state) => updateActive(state, (document) => withRoot(document,
     mapNode(document.root, nodeId, (node) => ({ ...node, ...patch, updatedAt: new Date().toISOString() }))))),
+  revealNode: (nodeId) => set((state) => updateActive(state, (document) => {
+    const root = expandPathToNode(document.root, nodeId)
+    return root === document.root ? document : withRoot(document, root)
+  }, false)),
   toggleSiblingChildren: (nodeId) => set((state) => updateActive(state, (document) => {
     const match = findParent(document.root, nodeId)
     const siblings = match?.parent.children ?? [document.root]

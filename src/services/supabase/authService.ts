@@ -1,6 +1,7 @@
 import { useUserStore } from '../../stores/userStore'
 import { supabase } from './client'
 import { cloudSyncService } from './cloudSyncService'
+import { usePaperStore } from '../../stores/paperStore'
 
 export const authService = {
   async initialize() {
@@ -12,7 +13,10 @@ export const authService = {
       name: typeof user.user_metadata.full_name === 'string' ? user.user_metadata.full_name : undefined,
       email: user.email,
     } : undefined)
-    if (user) await cloudSyncService.pull()
+    if (user) {
+      await cloudSyncService.pull()
+      await usePaperStore.getState().refresh()
+    }
     supabase.auth.onAuthStateChange((_event, session) => {
       const next = session?.user
       useUserStore.getState().setUser(next ? {
@@ -20,7 +24,10 @@ export const authService = {
         name: typeof next.user_metadata.full_name === 'string' ? next.user_metadata.full_name : undefined,
         email: next.email,
       } : undefined)
-      if (next) window.setTimeout(() => { void cloudSyncService.pull() }, 0)
+      if (next) window.setTimeout(() => {
+        void cloudSyncService.pull()
+          .then(() => usePaperStore.getState().refresh())
+      }, 0)
     })
   },
 

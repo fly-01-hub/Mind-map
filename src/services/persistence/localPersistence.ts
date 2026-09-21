@@ -3,6 +3,7 @@ import { documentRepository } from '../../repositories/documentRepository'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
 import { cloudSyncService } from '../supabase/cloudSyncService'
+import { usePaperStore } from '../../stores/paperStore'
 
 let unsubscribe: (() => void) | undefined
 let saveTimer: number | undefined
@@ -15,6 +16,7 @@ export async function initializeLocalPersistence() {
   const [documents, folders] = await Promise.all([
     documentRepository.loadDocuments(),
     documentRepository.loadFolders(),
+    usePaperStore.getState().hydrate(),
   ])
   useDocumentStore.getState().hydrate(documents, folders)
   lastDocuments = documents

@@ -144,6 +144,22 @@ export function getBreadcrumbs(root: NodeData, id: string, path: NodeData[] = []
   return []
 }
 
+export function expandPathToNode(root: NodeData, id: string): NodeData {
+  const path = getBreadcrumbs(root, id)
+  if (!path.length) return root
+  const ancestors = new Set(path.slice(0, -1).map((node) => node.id))
+  const expand = (node: NodeData): NodeData => {
+    let changed = ancestors.has(node.id) && node.collapsed
+    const children = node.children.map((child) => {
+      const next = expand(child)
+      if (next !== child) changed = true
+      return next
+    })
+    return changed ? { ...node, collapsed: ancestors.has(node.id) ? false : node.collapsed, children } : node
+  }
+  return expand(root)
+}
+
 export function countNodes(root: NodeData): number {
   return 1 + root.children.reduce((total, child) => total + countNodes(child), 0)
 }

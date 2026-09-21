@@ -25,4 +25,20 @@ describe('Markdown import and export', () => {
     expect(restored.taskStatus).toBe(root.taskStatus)
     expect(restored.children[0].title).toBe('实验')
   })
+
+  it('exports paper provenance next to a generated node', () => {
+    const root = createNode('Transformer')
+    const child = createNode('Multi-head Attention')
+    root.children = [child]
+    const markdown = treeToMarkdown(root, {
+      [child.id]: [{
+        paperTitle: 'Attention Is All You Need', pageNumber: 5,
+        selectedText: 'Transformer allows models to jointly attend.', note: '多头注意力的关键描述。',
+      }],
+    })
+    expect(markdown).toContain('来源：Attention Is All You Need · Page 5')
+    expect(markdown).toContain('引用：“Transformer allows models to jointly attend.”')
+    expect(markdown).toContain('我的笔记：多头注意力的关键描述。')
+    expect(markdownToTree(markdown).children[0].title).toBe('Multi-head Attention')
+  })
 })

@@ -9,6 +9,11 @@ test('library opens a right-facing editable map without console errors', async (
 
   await page.goto('/library')
   await expect(page.getByRole('heading', { name: '全部文档' })).toBeVisible()
+  const folderRow = page.getByRole('button', { name: '科研资料 2' })
+  const folderBox = await folderRow.boundingBox()
+  expect(folderBox).not.toBeNull()
+  expect(folderBox!.width).toBeGreaterThan(120)
+  expect(folderBox!.height).toBeLessThan(40)
   await page.getByText('自动驾驶感知研究', { exact: true }).click()
   await expect(page).toHaveURL(/\/map\/research-map/)
 
