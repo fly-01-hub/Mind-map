@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test'
 
+test('creates a complete local backup from the library', async ({ page }) => {
+  await page.addInitScript(() => { Reflect.deleteProperty(window, 'showSaveFilePicker') })
+  await page.goto('/library')
+  await page.getByRole('button', { name: '备份与恢复' }).click()
+  await expect(page.getByRole('heading', { name: '备份与恢复' })).toBeVisible()
+  await expect(page.getByText('备份文件包含导图、历史版本、附件、PDF、批注和阅读进度。')).toBeVisible()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /创建完整备份/ }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^ResearchMind-backup-.+\.researchmind$/)
+  expect(await download.failure()).toBeNull()
+  await expect(page.getByRole('status')).toContainText('备份已保存')
+})
+
 test('library opens a right-facing editable map without console errors', async ({ page }) => {
   const consoleErrors: string[] = []
   page.on('console', (message) => {

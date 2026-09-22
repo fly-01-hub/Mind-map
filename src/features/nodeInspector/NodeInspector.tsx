@@ -54,15 +54,15 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
   const linkedPapers = useMemo(() => {
     if (!node) return []
     const linkedIds = new Set(relations.filter((relation) => relation.documentId === documentId && relation.nodeId === node.id).map((relation) => relation.paperId))
-    return papers.filter((paper) => paper.userId === userId && linkedIds.has(paper.id)).map((paper) => ({
+    return papers.filter((paper) => linkedIds.has(paper.id)).map((paper) => ({
       ...paper,
       annotationCount: annotations.filter((annotation) => annotation.paperId === paper.id).length,
     }))
-  }, [annotations, documentId, node, papers, relations, userId])
+  }, [annotations, documentId, node, papers, relations])
   const availablePapers = useMemo(() => {
     const linkedIds = new Set(linkedPapers.map((paper) => paper.id))
-    return papers.filter((paper) => paper.userId === userId && !linkedIds.has(paper.id))
-  }, [linkedPapers, papers, userId])
+    return papers.filter((paper) => !linkedIds.has(paper.id))
+  }, [linkedPapers, papers])
   const paperSources = useMemo(() => {
     if (!node) return []
     return annotationNodeRelations

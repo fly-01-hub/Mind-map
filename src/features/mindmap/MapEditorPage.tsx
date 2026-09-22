@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ArrowLeft, Check, ChevronRight, CircleAlert, CloudOff, Focus, History,
+  ArrowLeft, Check, ChevronRight, CircleAlert, Focus, History,
   FileDown, FileUp, ImageDown, Maximize2, Minus, MoreHorizontal, PanelRight,
   Plus, Redo2, Search, Undo2, X,
 } from 'lucide-react'
@@ -29,10 +29,7 @@ const NodeInspector = lazy(() => import('../nodeInspector/NodeInspector').then((
 const saveLabels = {
   saving: { label: '正在保存…', icon: <span className="sync-dot" /> },
   local: { label: '已保存到本地', icon: <Check size={14} /> },
-  syncing: { label: '正在同步…', icon: <span className="sync-dot" /> },
-  synced: { label: '已同步', icon: <Check size={14} /> },
-  offline: { label: '离线', icon: <CloudOff size={14} /> },
-  error: { label: '同步失败', icon: <CircleAlert size={14} /> },
+  error: { label: '保存失败', icon: <CircleAlert size={14} /> },
 }
 
 export function MapEditorPage() {

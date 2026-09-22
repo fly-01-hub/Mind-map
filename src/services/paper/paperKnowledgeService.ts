@@ -5,7 +5,6 @@ import { useSaveStore } from '../../stores/saveStore'
 import type { PaperAnnotation } from '../../types/annotation'
 import type { Paper } from '../../types/paper'
 import { createNode, findNode, insertChild } from '../../utils/tree'
-import { paperSyncService } from '../supabase/paperSyncService'
 
 interface CreatePaperNodeInput {
   paper: Paper
@@ -76,7 +75,6 @@ export const paperKnowledgeService = {
     }))
     useSaveStore.getState().markLocal()
     await usePaperStore.getState().refresh()
-    void paperSyncService.syncPending(input.userId).catch(() => {})
     return { node, annotationRelation, paperRelation }
   },
 }

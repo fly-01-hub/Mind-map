@@ -79,7 +79,7 @@ export interface DocumentVersion {
   reason: 'interval' | 'important' | 'before-restore' | 'conflict'
 }
 
-export type SaveStatus = 'saving' | 'local' | 'syncing' | 'synced' | 'offline' | 'error'
+export type SaveStatus = 'saving' | 'local' | 'error'
 
 export interface ClipboardPayload {
   mode: 'copy' | 'cut'

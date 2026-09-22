@@ -17,8 +17,6 @@ createRoot(document.getElementById('root')!).render(
 async function bootstrapData() {
   const { initializeLocalPersistence } = await import('./services/persistence/localPersistence')
   await initializeLocalPersistence()
-  const { authService } = await import('./services/supabase/authService')
-  await authService.initialize()
 }
 
 void bootstrapData().catch(() => {

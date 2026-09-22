@@ -1,18 +1,18 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   Archive, ChevronDown, Clock3, FileText, Folder, FolderPlus, Heart,
-  LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, Settings,
+  LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search,
   Star, Tag, Trash2, X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { documentRepository } from '../../repositories/documentRepository'
-import { authService } from '../../services/supabase/authService'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import { useUserStore } from '../../stores/userStore'
 import type { FolderData, MindMapDocument, NodeData } from '../../types/mindmap'
 import { countNodes } from '../../utils/tree'
+import { BackupDialog } from '../backup/BackupDialog'
 
 function nodeMatches(node: NodeData, term: string): string | undefined {
   if ([node.title, node.note, ...node.tags].some((value) => value.toLowerCase().includes(term))) return node.id
@@ -173,8 +173,6 @@ export function LibraryPage() {
   const activeTag = filter.startsWith('tag:') ? filter.slice(4) : undefined
   const tags = [...new Set(documents.filter((document) => !document.deletedAt).flatMap((document) => [...collectTags(document.root)]))].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   const heading = filter === 'favorites' ? '收藏' : filter === 'recent' ? '最近打开' : filter === 'trash' ? '回收站' : activeTag ? `# ${activeTag}` : activeFolder?.name ?? '全部文档'
-  const signOut = async () => { await authService.signOut(); navigate('/login') }
-
   return (
     <div className="library-shell">
       <aside className="library-sidebar">
@@ -191,11 +189,11 @@ export function LibraryPage() {
         </nav>
         {tags.length > 0 && <><div className="sidebar-section-title"><span>标签</span></div><nav className="sidebar-nav tag-nav">{tags.slice(0, 8).map((tag) => <button key={tag} className={filter === `tag:${tag}` ? 'active' : ''} onClick={() => setFilter(`tag:${tag}`)}><Tag size={15} />{tag}</button>)}</nav></>}
         <div className="sidebar-spacer" />
-        <nav className="sidebar-nav"><button className={filter === 'trash' ? 'active' : ''} onClick={() => setFilter('trash')}><Trash2 size={17} />回收站<span>{documents.filter((item) => item.deletedAt).length || ''}</span></button><button onClick={() => void signOut()}><Settings size={17} />{user.isDemo ? '返回登录' : '退出登录'}</button></nav>
-        <div className="profile-chip"><span>{(user.name ?? user.email ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? user.email ?? '本地用户'}</strong><small>{user.isDemo ? 'Local-first' : user.email}</small></div><ChevronDown size={15} /></div>
+        <nav className="sidebar-nav"><button className={filter === 'trash' ? 'active' : ''} onClick={() => setFilter('trash')}><Trash2 size={17} />回收站<span>{documents.filter((item) => item.deletedAt).length || ''}</span></button></nav>
+        <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>资料保存在此浏览器</small></div><ChevronDown size={15} /></div>
       </aside>
       <main className="library-main">
-        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1></div>{filter !== 'trash' && <button className="primary-button" onClick={create}><Plus size={17} />新建思维导图</button>}</header>
+        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1></div><div className="library-header-actions"><BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create}><Plus size={17} />新建思维导图</button>}</div></header>
         <div className="library-toolbar"><label className="search-field"><Search size={17} /><input aria-label="搜索文档" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /></label><div className="view-switch"><button className="active" aria-label="列表视图"><List size={17} /></button><button aria-label="卡片视图" disabled><LayoutGrid size={17} /></button></div></div>
         <section className="document-list">
           <div className="document-list-head"><span>名称</span><span>文件夹</span><span>最近修改</span><span /></div>

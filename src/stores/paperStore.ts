@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { appDatabase } from '../db/appDatabase'
 import { paperRepository } from '../repositories/paperRepository'
-import { paperSyncService } from '../services/supabase/paperSyncService'
 import type { AnnotationNodeRelation, PaperAnnotation } from '../types/annotation'
 import type { NewPaperAnnotation } from '../types/annotation'
 import { paperAnnotationRepository } from '../repositories/paperAnnotationRepository'
@@ -47,9 +46,6 @@ export const usePaperStore = create<PaperState>((set, get) => ({
     try {
       const result = await paperRepository.saveAndLink(file, documentId, nodeId, userId)
       await get().refresh()
-      void paperSyncService.syncPending(userId).then(() => get().refresh()).catch(() => {
-        set({ error: '论文已保存在本地，云端同步将在联网后重试。' })
-      })
       return result.paper
     } catch (error) {
       set({ error: error instanceof Error ? error.message : '论文保存失败。' })
@@ -58,40 +54,25 @@ export const usePaperStore = create<PaperState>((set, get) => ({
       set({ busy: false })
     }
   },
-  linkPaper: async (documentId, nodeId, paperId, userId) => {
+  linkPaper: async (documentId, nodeId, paperId) => {
     await paperRepository.link(documentId, nodeId, paperId)
     await get().refresh()
-    void paperSyncService.syncPending(userId).catch(() => {
-      set({ error: '关联已保存在本地，云端同步将在联网后重试。' })
-    })
   },
-  unlinkPaper: async (documentId, nodeId, paperId, userId) => {
+  unlinkPaper: async (documentId, nodeId, paperId) => {
     await paperRepository.unlink(documentId, nodeId, paperId)
     await get().refresh()
-    void paperSyncService.syncPending(userId).catch(() => {
-      set({ error: '更改已保存在本地，云端同步将在联网后重试。' })
-    })
   },
   createAnnotation: async (input) => {
     const annotation = await paperAnnotationRepository.create(input)
     await get().refresh()
-    void paperSyncService.syncPending(input.userId).catch(() => {
-      set({ error: '标注已保存在本地，云端同步将在联网后重试。' })
-    })
     return annotation
   },
-  updateAnnotationContent: async (id, content, userId) => {
+  updateAnnotationContent: async (id, content) => {
     await paperAnnotationRepository.updateContent(id, content)
     await get().refresh()
-    void paperSyncService.syncPending(userId).catch(() => {
-      set({ error: '笔记已保存在本地，云端同步将在联网后重试。' })
-    })
   },
-  deleteAnnotation: async (id, userId) => {
+  deleteAnnotation: async (id) => {
     await paperAnnotationRepository.softDelete(id)
     await get().refresh()
-    void paperSyncService.syncPending(userId).catch(() => {
-      set({ error: '删除操作已保存在本地，云端同步将在联网后重试。' })
-    })
   },
 }))

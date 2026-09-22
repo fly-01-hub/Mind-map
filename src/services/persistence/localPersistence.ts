@@ -2,7 +2,6 @@ import type { FolderData, MindMapDocument } from '../../types/mindmap'
 import { documentRepository } from '../../repositories/documentRepository'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
-import { cloudSyncService } from '../supabase/cloudSyncService'
 import { usePaperStore } from '../../stores/paperStore'
 
 let unsubscribe: (() => void) | undefined
@@ -10,6 +9,20 @@ let saveTimer: number | undefined
 let lastDocuments: MindMapDocument[] | undefined
 let lastFolders: FolderData[] | undefined
 const lastSnapshotAt = new Map<string, number>()
+
+export async function flushLocalPersistence() {
+  if (saveTimer) {
+    window.clearTimeout(saveTimer)
+    saveTimer = undefined
+  }
+  const latest = useDocumentStore.getState()
+  await Promise.all([
+    documentRepository.saveDocuments(latest.documents),
+    documentRepository.saveFolders(latest.folders),
+  ])
+  await createIntervalSnapshots(latest.documents)
+  useSaveStore.getState().markLocal()
+}
 
 export async function initializeLocalPersistence() {
   await documentRepository.initialize()
@@ -30,22 +43,13 @@ export async function initializeLocalPersistence() {
     useSaveStore.getState().markSaving()
     if (saveTimer) window.clearTimeout(saveTimer)
     saveTimer = window.setTimeout(async () => {
-      const latest = useDocumentStore.getState()
       try {
-        await Promise.all([
-          documentRepository.saveDocuments(latest.documents),
-          documentRepository.saveFolders(latest.folders),
-        ])
-        useSaveStore.getState().markLocal()
-        await createIntervalSnapshots(latest.documents)
-        cloudSyncService.queue(latest.documents, latest.folders)
+        await flushLocalPersistence()
       } catch {
         useSaveStore.getState().setStatus('error')
       }
     }, 350)
   })
-
-  cloudSyncService.startNetworkMonitoring()
 }
 
 async function createIntervalSnapshots(documents: MindMapDocument[]) {

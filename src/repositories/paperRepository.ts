@@ -15,7 +15,9 @@ async function checksum(file: Blob) {
 }
 
 async function createOrReusePaper(file: File, userId: string, fileChecksum: string): Promise<Paper> {
-  const existing = await appDatabase.papers.where('[userId+checksum]').equals([userId, fileChecksum]).first()
+  // Older local databases may still contain the ID of a former cloud account.
+  // Ownership no longer limits access, so reuse identical local files regardless of that legacy value.
+  const existing = await appDatabase.papers.where('checksum').equals(fileChecksum).first()
   const now = new Date().toISOString()
   if (existing) {
     const restored = existing.deletedAt ? { ...existing, deletedAt: undefined, updatedAt: now } : existing
