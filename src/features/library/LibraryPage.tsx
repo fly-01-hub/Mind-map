@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  Archive, ChevronDown, Clock3, FileText, Folder, FolderPlus, Heart,
-  LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search,
+  Archive, BookOpen, Clock3, FileText, Folder, FolderPlus, GitBranch, HardDrive, Heart,
+  LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, ShieldCheck,
   Star, Tag, Trash2, X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -79,11 +79,12 @@ function FolderTreeRow({ folder, folders, documents, filter, depth, setFilter }:
   </>
 }
 
-function DocumentRow({ document, folders, inTrash, open }: {
+function DocumentRow({ document, folders, inTrash, open, viewMode = 'list' }: {
   document: MindMapDocument
   folders: FolderData[]
   inTrash: boolean
   open: (document: MindMapDocument) => void
+  viewMode?: 'list' | 'grid'
 }) {
   const toggleFavorite = useDocumentStore((state) => state.toggleFavorite)
   const trashDocument = useDocumentStore((state) => state.trashDocument)
@@ -106,6 +107,29 @@ function DocumentRow({ document, folders, inTrash, open }: {
     trashDocument(document.id)
   }
 
+  const menu = () => <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild><button className="icon-button row-action" aria-label="更多" onClick={(event) => event.stopPropagation()}><MoreHorizontal size={18} /></button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" align="end">
+      {inTrash ? <>
+        <DropdownMenu.Item className="dropdown-item" onSelect={() => restoreDocument(document.id)}><RotateCcw size={15} />恢复</DropdownMenu.Item>
+        <DropdownMenu.Item className="dropdown-item danger-item" onSelect={() => void permanentlyDelete()}><Trash2 size={15} />永久删除</DropdownMenu.Item>
+      </> : <>
+        <DropdownMenu.Label className="dropdown-label">移动到文件夹</DropdownMenu.Label>
+        {folders.filter((folder) => !folder.deletedAt).map((folder) => <DropdownMenu.Item key={folder.id} className="dropdown-item" onSelect={() => moveDocument(document.id, folder.id)}><Folder size={15} />{folder.name}</DropdownMenu.Item>)}
+        <DropdownMenu.Separator className="context-separator" />
+        <DropdownMenu.Item className="dropdown-item danger-item" onSelect={() => void moveToTrash()}><Trash2 size={15} />移到回收站</DropdownMenu.Item>
+      </>}
+    </DropdownMenu.Content></DropdownMenu.Portal>
+  </DropdownMenu.Root>
+
+  if (viewMode === 'grid') return (
+    <article className="document-card" role="button" tabIndex={0} draggable={!inTrash} onDragStart={(event) => event.dataTransfer.setData('application/x-zhijian-document', document.id)} onClick={() => !inTrash && open(document)} onKeyDown={(event) => event.key === 'Enter' && !inTrash && open(document)}>
+      <header><span className="document-card-icon"><FileText size={19} /></span><div className="document-card-actions">{!inTrash && <button className={`icon-button ${document.isFavorite ? 'is-favorite' : ''}`} aria-label="收藏" onClick={(event) => { event.stopPropagation(); toggleFavorite(document.id) }}><Star size={16} fill={document.isFavorite ? 'currentColor' : 'none'} /></button>}{menu()}</div></header>
+      <div className="document-card-body"><strong>{document.title}</strong><span><GitBranch size={13} />{countNodes(document.root)} 个节点</span></div>
+      <footer><span className="folder-pill">{folderName}</span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(document.updatedAt))}</time></footer>
+    </article>
+  )
+
   return (
     <div className="document-row" role="button" tabIndex={0} draggable={!inTrash} onDragStart={(event) => event.dataTransfer.setData('application/x-zhijian-document', document.id)} onClick={() => !inTrash && open(document)} onKeyDown={(event) => event.key === 'Enter' && !inTrash && open(document)}>
       <div className="document-icon"><FileText size={18} /></div>
@@ -113,20 +137,7 @@ function DocumentRow({ document, folders, inTrash, open }: {
       <span className="folder-pill">{folderName}</span>
       <time>{new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(document.updatedAt))}</time>
       {!inTrash && <button className={`icon-button row-action ${document.isFavorite ? 'is-favorite' : ''}`} aria-label="收藏" onClick={(event) => { event.stopPropagation(); toggleFavorite(document.id) }}><Star size={17} fill={document.isFavorite ? 'currentColor' : 'none'} /></button>}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild><button className="icon-button row-action" aria-label="更多" onClick={(event) => event.stopPropagation()}><MoreHorizontal size={18} /></button></DropdownMenu.Trigger>
-        <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" align="end">
-          {inTrash ? <>
-            <DropdownMenu.Item className="dropdown-item" onSelect={() => restoreDocument(document.id)}><RotateCcw size={15} />恢复</DropdownMenu.Item>
-            <DropdownMenu.Item className="dropdown-item danger-item" onSelect={() => void permanentlyDelete()}><Trash2 size={15} />永久删除</DropdownMenu.Item>
-          </> : <>
-            <DropdownMenu.Label className="dropdown-label">移动到文件夹</DropdownMenu.Label>
-            {folders.filter((folder) => !folder.deletedAt).map((folder) => <DropdownMenu.Item key={folder.id} className="dropdown-item" onSelect={() => moveDocument(document.id, folder.id)}><Folder size={15} />{folder.name}</DropdownMenu.Item>)}
-            <DropdownMenu.Separator className="context-separator" />
-            <DropdownMenu.Item className="dropdown-item danger-item" onSelect={() => void moveToTrash()}><Trash2 size={15} />移到回收站</DropdownMenu.Item>
-          </>}
-        </DropdownMenu.Content></DropdownMenu.Portal>
-      </DropdownMenu.Root>
+      {menu()}
     </div>
   )
 }
@@ -144,6 +155,11 @@ export function LibraryPage() {
   const [query, setQuery] = useState('')
   const [addingFolder, setAddingFolder] = useState(false)
   const [folderDraft, setFolderDraft] = useState('')
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => window.localStorage.getItem('zhijian-library-view') === 'grid' ? 'grid' : 'list')
+  const changeViewMode = (mode: 'list' | 'grid') => {
+    setViewMode(mode)
+    window.localStorage.setItem('zhijian-library-view', mode)
+  }
 
   const visibleDocuments = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -164,7 +180,11 @@ export function LibraryPage() {
     setSelectedNode(match)
     navigate(`/map/${document.id}`)
   }
-  const create = () => { const document = createDocument(); navigate(`/map/${document.id}`) }
+  const create = () => {
+    const document = createDocument()
+    setSelectedNode(document.root.id)
+    navigate(`/map/${document.id}`)
+  }
   const submitFolder = () => {
     if (folderDraft.trim()) { const id = createFolder(folderDraft.trim()); setFilter(`folder:${id}`) }
     setFolderDraft(''); setAddingFolder(false)
@@ -173,6 +193,10 @@ export function LibraryPage() {
   const activeTag = filter.startsWith('tag:') ? filter.slice(4) : undefined
   const tags = [...new Set(documents.filter((document) => !document.deletedAt).flatMap((document) => [...collectTags(document.root)]))].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   const heading = filter === 'favorites' ? '收藏' : filter === 'recent' ? '最近打开' : filter === 'trash' ? '回收站' : activeTag ? `# ${activeTag}` : activeFolder?.name ?? '全部文档'
+  const activeDocuments = documents.filter((item) => !item.deletedAt)
+  const totalNodeCount = activeDocuments.reduce((total, item) => total + countNodes(item.root), 0)
+  const activeFolderCount = folders.filter((item) => !item.deletedAt).length
+  const subtitle = filter === 'trash' ? '这里的内容仍可恢复，永久删除后无法撤销' : activeFolder ? `浏览“${activeFolder.name}”中的知识地图` : activeTag ? '按标签聚合相关导图' : '整理思路、论文与长期研究资料'
   return (
     <div className="library-shell">
       <aside className="library-sidebar">
@@ -190,14 +214,21 @@ export function LibraryPage() {
         {tags.length > 0 && <><div className="sidebar-section-title"><span>标签</span></div><nav className="sidebar-nav tag-nav">{tags.slice(0, 8).map((tag) => <button key={tag} className={filter === `tag:${tag}` ? 'active' : ''} onClick={() => setFilter(`tag:${tag}`)}><Tag size={15} />{tag}</button>)}</nav></>}
         <div className="sidebar-spacer" />
         <nav className="sidebar-nav"><button className={filter === 'trash' ? 'active' : ''} onClick={() => setFilter('trash')}><Trash2 size={17} />回收站<span>{documents.filter((item) => item.deletedAt).length || ''}</span></button></nav>
-        <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>资料保存在此浏览器</small></div><ChevronDown size={15} /></div>
+        <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>资料保存在此浏览器</small></div><HardDrive size={14} /></div>
       </aside>
       <main className="library-main">
-        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1></div><div className="library-header-actions"><BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create}><Plus size={17} />新建思维导图</button>}</div></header>
-        <div className="library-toolbar"><label className="search-field"><Search size={17} /><input aria-label="搜索文档" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /></label><div className="view-switch"><button className="active" aria-label="列表视图"><List size={17} /></button><button aria-label="卡片视图" disabled><LayoutGrid size={17} /></button></div></div>
-        <section className="document-list">
-          <div className="document-list-head"><span>名称</span><span>文件夹</span><span>最近修改</span><span /></div>
-          {visibleDocuments.map((document) => <DocumentRow key={document.id} document={document} folders={folders} inTrash={filter === 'trash'} open={open} />)}
+        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1><p className="library-subtitle">{subtitle}</p></div><div className="library-header-actions"><BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create}><Plus size={17} />新建思维导图</button>}</div></header>
+        <section className="library-overview" aria-label="知识库概览">
+          <div><FileText size={17} /><span><strong>{activeDocuments.length}</strong> 份导图</span></div>
+          <div><GitBranch size={17} /><span><strong>{totalNodeCount}</strong> 个节点</span></div>
+          <div><Folder size={17} /><span><strong>{activeFolderCount}</strong> 个文件夹</span></div>
+          <div className="library-overview-tip"><BookOpen size={17} /><span>打开导图后，可把 PDF 直接拖到主题上</span></div>
+          <div className="library-overview-safe"><ShieldCheck size={16} />自动保存到本地</div>
+        </section>
+        <div className="library-toolbar"><label className="search-field"><Search size={17} /><input aria-label="搜索文档" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /></label><div className="view-switch"><button className={viewMode === 'list' ? 'active' : ''} aria-label="列表视图" onClick={() => changeViewMode('list')}><List size={17} /></button><button className={viewMode === 'grid' ? 'active' : ''} aria-label="卡片视图" onClick={() => changeViewMode('grid')}><LayoutGrid size={17} /></button></div></div>
+        <section className={viewMode === 'grid' ? 'document-grid' : 'document-list'}>
+          {viewMode === 'list' && <div className="document-list-head"><span>名称</span><span>文件夹</span><span>最近修改</span><span /></div>}
+          {visibleDocuments.map((document) => <DocumentRow key={document.id} document={document} folders={folders} inTrash={filter === 'trash'} open={open} viewMode={viewMode} />)}
           {!visibleDocuments.length && <div className="empty-state"><Search size={24} /><strong>{filter === 'trash' ? '回收站是空的' : '没有找到相关内容'}</strong><span>{filter === 'trash' ? '删除的文档会暂存在这里' : '试试更短的关键词'}</span></div>}
         </section>
       </main>

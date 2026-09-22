@@ -16,6 +16,7 @@
 | Ctrl + Z | 撤销 |
 | Ctrl + Y / Ctrl + Shift + Z | 重做 |
 | Ctrl + F | 打开搜索入口 |
+| ? | 打开操作指南与快捷键 |
 | Escape | 取消选择/关闭当前操作 |
 
 ## 编辑状态
@@ -24,6 +25,12 @@
 - Shift + Enter：节点内换行
 - Escape：结束编辑
 - 输入法组合期间的 Enter 只确认候选词，不执行节点命令。代码同时检查 `KeyboardEvent.isComposing` 和 `compositionstart/compositionend`。
+
+## 文件拖放
+
+- 把 PDF 拖到某个主题：在该主题下创建论文子节点并关联原始 PDF。
+- 把 PDF 拖到画布空白处：优先添加到当前选中主题；没有选中主题时添加到根主题。
+- 图片和其他文件拖到主题：作为普通附件保存在该主题中。
 
 ## PDF 阅读模式
 

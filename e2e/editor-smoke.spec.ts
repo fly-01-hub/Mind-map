@@ -15,6 +15,24 @@ test('creates a complete local backup from the library', async ({ page }) => {
   await expect(page.getByRole('status')).toContainText('备份已保存')
 })
 
+test('switches library layouts and exposes the canvas operation guide', async ({ page }) => {
+  await page.goto('/library')
+  await page.getByRole('button', { name: '卡片视图' }).click()
+  await expect(page.locator('.document-card')).toHaveCount(3)
+  await page.reload()
+  await expect(page.locator('.document-card')).toHaveCount(3)
+  await page.getByRole('button', { name: '列表视图' }).click()
+  await expect(page.locator('.document-row')).toHaveCount(3)
+
+  await page.getByText('自动驾驶感知研究', { exact: true }).click()
+  await page.getByRole('button', { name: '操作指南' }).click()
+  await expect(page.getByRole('heading', { name: '操作指南与快捷键' })).toBeVisible()
+  await expect(page.getByText('把论文放进导图')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '放大' }).click()
+  await expect(page.locator('.canvas-scale')).toHaveText('110%')
+})
+
 test('library opens a right-facing editable map without console errors', async ({ page }) => {
   const consoleErrors: string[] = []
   page.on('console', (message) => {

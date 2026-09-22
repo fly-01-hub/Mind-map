@@ -80,4 +80,4 @@ npx playwright install chromium
 - `e2e/`：真实浏览器关键流程
 - `docs/`：产品、架构、数据模型、快捷键和限制
 
-进一步阅读：[产品说明](docs/PRODUCT.md)、[架构](docs/ARCHITECTURE.md)、[数据模型](docs/DATA_MODEL.md)、[快捷键](docs/SHORTCUTS.md)、[已知限制](docs/KNOWN_ISSUES.md)。
+进一步阅读：[产品说明](docs/PRODUCT.md)、[产品体验评审](docs/PRODUCT_REVIEW.md)、[架构](docs/ARCHITECTURE.md)、[数据模型](docs/DATA_MODEL.md)、[快捷键](docs/SHORTCUTS.md)、[已知限制](docs/KNOWN_ISSUES.md)。

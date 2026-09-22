@@ -136,8 +136,19 @@ export class MindMapEngineAdapter {
     if (element) this.engine.focusNode(element)
   }
 
-  fit() { this.engine.scaleFit() }
+  fit() {
+    this.engine.scaleFit()
+    return this.engine.scaleVal
+  }
   center() { this.engine.toCenter() }
+
+  getScale() { return this.engine.scaleVal }
+
+  zoomBy(delta: number) {
+    const next = Math.min(2, Math.max(.4, Math.round((this.engine.scaleVal + delta) * 10) / 10))
+    this.engine.scale(next)
+    return next
+  }
 
   async exportPng(fileName: string) {
     const selected = [...this.engine.currentNodes]

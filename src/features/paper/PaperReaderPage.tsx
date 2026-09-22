@@ -229,8 +229,8 @@ export function PaperReaderPage() {
     navigate(documentId ? `/map/${documentId}` : '/library')
   }
 
-  if (!paper) return <main className="paper-reader-message"><h1>找不到论文</h1><p>它可能已被删除，或尚未同步到这台设备。</p><button onClick={() => navigate('/library')}>返回文档库</button></main>
-  if (loading) return <main className="paper-reader-message"><span className="reader-spinner" /><h1>正在打开论文</h1><p>首次打开云端论文时会先保存离线副本。</p></main>
+  if (!paper) return <main className="paper-reader-message"><h1>找不到论文</h1><p>它可能已被删除，或恢复备份时没有包含这篇论文。</p><button onClick={() => navigate('/library')}>返回文档库</button></main>
+  if (loading) return <main className="paper-reader-message"><span className="reader-spinner" /><h1>正在打开论文</h1><p>正在从本地资料库读取 PDF。</p></main>
   if (error || !document) return <main className="paper-reader-message"><h1>无法打开论文</h1><p>{error}</p><div><button onClick={leaveReader}>返回</button><button onClick={() => { setLoading(true); setError(''); setDocument(undefined); setReloadKey((value) => value + 1) }}><RotateCcw size={14} />重试</button></div></main>
 
   return (

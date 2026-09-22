@@ -1,8 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ArrowLeft, Check, ChevronRight, CircleAlert, Focus, History,
+  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, History,
   FileDown, FileUp, ImageDown, Maximize2, Minus, MoreHorizontal, PanelRight,
-  Plus, Redo2, Search, Undo2, X,
+  Plus, Redo2, Search, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -11,7 +11,7 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import { useUiStore } from '../../stores/uiStore'
-import { findNode, getBreadcrumbs } from '../../utils/tree'
+import { countNodes, findNode, getBreadcrumbs } from '../../utils/tree'
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
@@ -22,6 +22,7 @@ import { documentRepository } from '../../repositories/documentRepository'
 import { downloadText } from '../../services/export/download'
 import { markdownToTree, treeToMarkdown, type MarkdownPaperSources } from '../../services/export/markdown'
 import { searchDocuments } from '../../utils/search'
+import { ShortcutHelpDialog } from './ShortcutHelpDialog'
 import 'mind-elixir/style.css'
 
 const NodeInspector = lazy(() => import('../nodeInspector/NodeInspector').then((module) => ({ default: module.NodeInspector })))
@@ -46,8 +47,10 @@ export function MapEditorPage() {
   const [nodeAnchor, setNodeAnchor] = useState<NodeAnchor>()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [fileDropTargetId, setFileDropTargetId] = useState<string>()
+  const [canvasScale, setCanvasScale] = useState(1)
   const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
   const papers = usePaperStore((state) => state.papers)
   const paperAnnotations = usePaperStore((state) => state.annotations)
@@ -123,6 +126,7 @@ export function MapEditorPage() {
       void adapter.init(viewRoot).then(() => {
         if (!active) return
         setEngineReady(true)
+        setCanvasScale(adapter.getScale())
         const selection = useSelectionStore.getState().selectedNodeId
         if (selection) adapter.select(selection)
       })
@@ -271,6 +275,7 @@ export function MapEditorPage() {
     if (mod && event.key === ']') { event.preventDefault(); command('focus'); return }
     if (mod && event.shiftKey && event.key === '.') { event.preventDefault(); command('toggleSiblings'); return }
     if (event.altKey && event.key === '.') { event.preventDefault(); command('toggle'); return }
+    if (event.key === '?') { event.preventDefault(); setHelpOpen(true); return }
     if (event.key === 'Enter') { event.preventDefault(); command('sibling'); return }
     if (event.key === 'Tab') { event.preventDefault(); if (event.shiftKey) command('promote'); else command('child'); return }
     if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); command('remove'); return }
@@ -285,15 +290,17 @@ export function MapEditorPage() {
   return (
     <div className={`editor-shell ${inspectorOpen ? 'with-inspector' : ''}`}>
       <header className="editor-toolbar">
-        <button className="icon-button" onClick={() => navigate('/library')} aria-label="返回知识库"><ArrowLeft size={19} /></button>
+        <button className="icon-button" onClick={() => navigate('/library')} aria-label="返回知识库" title="返回知识库"><ArrowLeft size={19} /></button>
         <div className="toolbar-divider" />
         <input className="document-title-input" value={document.title} aria-label="文档名称" onChange={(event) => renameDocument(document.id, event.target.value)} />
         <div className={`save-status status-${saveStatus}`}>{activeSave.icon}<span>{activeSave.label}</span></div>
+        <span className="document-node-count">{countNodes(document.root)} 个节点</span>
         <div className="toolbar-spacer" />
-        <button className="icon-button" onClick={() => setSearchOpen(!searchOpen)} aria-label="搜索"><Search size={18} /></button>
-        <button className="icon-button" onClick={() => setInspectorOpen(!inspectorOpen)} aria-label="节点详情"><PanelRight size={18} /></button>
+        <button className={`toolbar-action-button ${searchOpen ? 'active' : ''}`} onClick={() => setSearchOpen(!searchOpen)} aria-label="搜索" title="搜索节点（Ctrl + F）"><Search size={16} /><span>搜索</span></button>
+        <button className={`toolbar-action-button ${inspectorOpen ? 'active' : ''}`} onClick={() => setInspectorOpen(!inspectorOpen)} aria-label="节点详情" title="打开节点详情"><PanelRight size={16} /><span>详情</span></button>
+        <button className="icon-button" onClick={() => setHelpOpen(true)} aria-label="操作指南" title="操作指南（?）"><CircleHelp size={18} /></button>
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild><button className="icon-button" aria-label="更多"><MoreHorizontal size={19} /></button></DropdownMenu.Trigger>
+          <DropdownMenu.Trigger asChild><button className="icon-button" aria-label="更多" title="导入、导出与历史"><MoreHorizontal size={19} /></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" align="end">
             <DropdownMenu.Label className="dropdown-label">导入与导出</DropdownMenu.Label>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setImportOpen(true)}><FileUp size={16} />导入 Markdown</DropdownMenu.Item>
@@ -387,12 +394,24 @@ export function MapEditorPage() {
             }}>{nodeAnchor.collapsed ? <Plus size={12} /> : <Minus size={12} />}</button>}
             {nodeAnchor.id === selectedNodeId && <button className="node-mini-button add-button" aria-label="添加子主题" onClick={() => command('child')}><Plus size={14} /></button>}
           </div>}
-          <div className="canvas-controls"><button onClick={() => adapterRef.current?.center()} title="居中"><Focus size={16} /></button><button onClick={() => adapterRef.current?.fit()} title="适应画布"><Maximize2 size={16} /></button><span /><button onClick={() => useDocumentStore.getState().undo()} title="撤销"><Undo2 size={16} /></button><button onClick={() => useDocumentStore.getState().redo()} title="重做"><Redo2 size={16} /></button></div>
+          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '将 PDF 拖到主题即可建立文献节点'}</span><kbd>?</kbd></button>}
+          <div className="canvas-controls">
+            <button onClick={() => adapterRef.current?.center()} title="居中" aria-label="居中"><Focus size={16} /></button>
+            <button onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布" aria-label="适应画布"><Maximize2 size={16} /></button>
+            <i />
+            <button onClick={() => setCanvasScale(adapterRef.current?.zoomBy(-.1) ?? canvasScale)} disabled={canvasScale <= .4} title="缩小" aria-label="缩小"><ZoomOut size={16} /></button>
+            <button className="canvas-scale" onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布">{Math.round(canvasScale * 100)}%</button>
+            <button onClick={() => setCanvasScale(adapterRef.current?.zoomBy(.1) ?? canvasScale)} disabled={canvasScale >= 2} title="放大" aria-label="放大"><ZoomIn size={16} /></button>
+            <i />
+            <button onClick={() => useDocumentStore.getState().undo()} title="撤销（Ctrl + Z）" aria-label="撤销"><Undo2 size={16} /></button>
+            <button onClick={() => useDocumentStore.getState().redo()} title="重做（Ctrl + Y）" aria-label="重做"><Redo2 size={16} /></button>
+          </div>
         </main>
       </NodeContextMenu>
       {inspectorOpen && <Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} /></Suspense>}
       <HistoryDialog document={document} open={historyOpen} onOpenChange={setHistoryOpen} />
       <ImportMarkdownDialog open={importOpen} onOpenChange={setImportOpen} onImport={importMarkdown} />
+      <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   )
 }
