@@ -15,7 +15,7 @@ import { findNode, getBreadcrumbs } from '../../utils/tree'
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
-import { isPdfFile } from '../../repositories/paperRepository'
+import { isPdfFile, titleFromPdfFileName } from '../../repositories/paperRepository'
 import { usePaperStore } from '../../stores/paperStore'
 import { useUserStore } from '../../stores/userStore'
 import { documentRepository } from '../../repositories/documentRepository'
@@ -47,6 +47,7 @@ export function MapEditorPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [fileDropTargetId, setFileDropTargetId] = useState<string>()
   const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
   const papers = usePaperStore((state) => state.papers)
   const paperAnnotations = usePaperStore((state) => state.annotations)
@@ -204,19 +205,33 @@ export function MapEditorPage() {
     }
   }, [editNewNode, setFocusRoot, setInspectorOpen, setSelectedNode])
 
-  const attachFiles = async (files: FileList, nodeId: string) => {
+  const attachFiles = async (files: FileList | File[], nodeId: string) => {
     if (!document) return
-    const target = findNode(useDocumentStore.getState().documents.find((item) => item.id === document.id)?.root ?? document.root, nodeId)
+    const store = useDocumentStore.getState()
+    // A file can be dropped immediately after a direct route opens, before the route effect
+    // has marked this document active. Make the command self-contained instead of timing-dependent.
+    if (store.activeDocumentId !== document.id) store.openDocument(document.id)
+    const target = findNode(store.documents.find((item) => item.id === document.id)?.root ?? document.root, nodeId)
     if (!target) return
     const attachments = []
+    let openedNodeId = nodeId
     for (const file of Array.from(files)) {
       if (isPdfFile(file)) {
-        try { await usePaperStore.getState().uploadAndLink(file, document.id, nodeId, userId) } catch { /* Error is shown in the Inspector. */ }
+        const paperNodeId = useDocumentStore.getState().insertChild(nodeId)
+        if (!paperNodeId) continue
+        useDocumentStore.getState().updateNode(paperNodeId, { title: titleFromPdfFileName(file.name) })
+        try {
+          await usePaperStore.getState().uploadAndLink(file, document.id, paperNodeId, userId)
+          openedNodeId = paperNodeId
+        } catch {
+          useDocumentStore.getState().remove(paperNodeId)
+          window.alert(`“${file.name}”导入失败，请确认它是有效的 PDF 文件。`)
+        }
       }
       else attachments.push(await attachmentRepository.save(document.id, nodeId, file))
     }
     if (attachments.length) useDocumentStore.getState().updateNode(nodeId, { attachments: [...target.attachments, ...attachments] })
-    setSelectedNode(nodeId)
+    setSelectedNode(openedNodeId)
     setInspectorOpen(true)
   }
 
@@ -293,7 +308,7 @@ export function MapEditorPage() {
       {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => { setSelectedNode(result.nodeId); setFocusRoot(result.nodeId); setSearchOpen(false); setSearchQuery('') }}><strong>{result.nodeTitle}</strong><span>{result.field === 'note' ? '笔记' : result.field === 'tag' ? '标签' : '标题'} · {result.excerpt}</span></button>)}{!searchResults.length && <p>没有找到相关节点</p>}</div>}</div>}
       <NodeContextMenu onCommand={command} isRoot={isRoot} hasClipboard={Boolean(useDocumentStore.getState().clipboard)}>
         <main
-          className="mindmap-stage"
+          className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''}`}
           tabIndex={0}
           onPointerDownCapture={(event) => {
             if (!(event.target as HTMLElement).isContentEditable) event.currentTarget.focus({ preventScroll: true })
@@ -301,13 +316,31 @@ export function MapEditorPage() {
           onKeyDownCapture={handleKeyDown}
           onCompositionStartCapture={() => { composingRef.current = true }}
           onCompositionEndCapture={() => { composingRef.current = false }}
-          onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
-          onDrop={(event) => {
-            if (!event.dataTransfer.files.length) return
+          onDragEnterCapture={(event) => {
+            if (!event.dataTransfer.types.includes('Files')) return
             event.preventDefault()
             const anchor = adapterRef.current?.resolveNode(event.target)
-            const targetId = anchor?.id ?? selectedNodeId
-            if (targetId) void attachFiles(event.dataTransfer.files, targetId)
+            setFileDropTargetId(anchor?.id ?? selectedNodeId ?? document.root.id)
+          }}
+          onDragOverCapture={(event) => {
+            if (!event.dataTransfer.types.includes('Files')) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+            const anchor = adapterRef.current?.resolveNode(event.target)
+            setFileDropTargetId(anchor?.id ?? selectedNodeId ?? document.root.id)
+          }}
+          onDragLeaveCapture={(event) => {
+            const nextTarget = event.relatedTarget
+            if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setFileDropTargetId(undefined)
+          }}
+          onDropCapture={(event) => {
+            if (!event.dataTransfer.files.length) return
+            event.preventDefault()
+            event.stopPropagation()
+            const anchor = adapterRef.current?.resolveNode(event.target)
+            const targetId = anchor?.id ?? fileDropTargetId ?? selectedNodeId ?? document.root.id
+            setFileDropTargetId(undefined)
+            void attachFiles(event.dataTransfer.files, targetId)
           }}
           onContextMenuCapture={(event) => {
             if (event.detail === 731) return
@@ -343,6 +376,10 @@ export function MapEditorPage() {
           }}
         >
           <div ref={canvasRef} className="mindmap-canvas" data-testid="mindmap-canvas" />
+          {fileDropTargetId && <div className="file-drop-hint">
+            <FileUp size={18} />
+            <span>松开以导入；PDF 将成为“{findNode(document.root, fileDropTargetId)?.title ?? document.root.title}”的子节点</span>
+          </div>}
           {nodeAnchor && <div className="node-quick-actions" style={{ left: nodeAnchor.left + nodeAnchor.width + 7, top: nodeAnchor.top + nodeAnchor.height / 2 }}>
             {nodeAnchor.hasChildren && <button className="node-mini-button collapse-button" aria-label={nodeAnchor.collapsed ? '展开下级' : '折叠下级'} onClick={() => {
               adapterRef.current?.toggleExpanded(nodeAnchor.id)
