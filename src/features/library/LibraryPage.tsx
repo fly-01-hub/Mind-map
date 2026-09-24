@@ -1,10 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   Archive, BookOpen, Clock3, FileText, Folder, FolderPlus, GitBranch, HardDrive, Heart,
-  LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, ShieldCheck,
+  Download, LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, ShieldCheck,
   Star, Tag, Trash2, X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { documentRepository } from '../../repositories/documentRepository'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -13,6 +13,11 @@ import { useUserStore } from '../../stores/userStore'
 import type { FolderData, MindMapDocument, NodeData } from '../../types/mindmap'
 import { countNodes } from '../../utils/tree'
 import { BackupDialog } from '../backup/BackupDialog'
+
+interface InstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
 
 function nodeMatches(node: NodeData, term: string): string | undefined {
   if ([node.title, node.note, ...node.tags].some((value) => value.toLowerCase().includes(term))) return node.id
@@ -155,6 +160,8 @@ export function LibraryPage() {
   const [query, setQuery] = useState('')
   const [addingFolder, setAddingFolder] = useState(false)
   const [folderDraft, setFolderDraft] = useState('')
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent>()
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => window.localStorage.getItem('zhijian-library-view') === 'grid' ? 'grid' : 'list')
   const changeViewMode = (mode: 'list' | 'grid') => {
     setViewMode(mode)
@@ -185,6 +192,43 @@ export function LibraryPage() {
     setSelectedNode(document.root.id)
     navigate(`/map/${document.id}`)
   }
+  useEffect(() => {
+    const capturePrompt = (event: Event) => {
+      event.preventDefault()
+      setInstallPrompt(event as InstallPromptEvent)
+    }
+    const clearPrompt = () => setInstallPrompt(undefined)
+    window.addEventListener('beforeinstallprompt', capturePrompt)
+    window.addEventListener('appinstalled', clearPrompt)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', capturePrompt)
+      window.removeEventListener('appinstalled', clearPrompt)
+    }
+  }, [])
+  useEffect(() => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const editing = target?.matches('input, textarea, [contenteditable="true"]')
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n' && !editing) {
+        event.preventDefault()
+        create()
+      } else if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !editing)) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      } else if (event.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        setQuery('')
+        searchInputRef.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalShortcut)
+    return () => window.removeEventListener('keydown', handleGlobalShortcut)
+  })
+  const installApp = async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt()
+    await installPrompt.userChoice
+    setInstallPrompt(undefined)
+  }
   const submitFolder = () => {
     if (folderDraft.trim()) { const id = createFolder(folderDraft.trim()); setFilter(`folder:${id}`) }
     setFolderDraft(''); setAddingFolder(false)
@@ -196,6 +240,7 @@ export function LibraryPage() {
   const activeDocuments = documents.filter((item) => !item.deletedAt)
   const totalNodeCount = activeDocuments.reduce((total, item) => total + countNodes(item.root), 0)
   const activeFolderCount = folders.filter((item) => !item.deletedAt).length
+  const localStorageLabel = window.location.protocol === 'app:' ? '资料保存在此电脑' : '资料保存在此浏览器'
   const subtitle = filter === 'trash' ? '这里的内容仍可恢复，永久删除后无法撤销' : activeFolder ? `浏览“${activeFolder.name}”中的知识地图` : activeTag ? '按标签聚合相关导图' : '整理思路、论文与长期研究资料'
   return (
     <div className="library-shell">
@@ -214,10 +259,10 @@ export function LibraryPage() {
         {tags.length > 0 && <><div className="sidebar-section-title"><span>标签</span></div><nav className="sidebar-nav tag-nav">{tags.slice(0, 8).map((tag) => <button key={tag} className={filter === `tag:${tag}` ? 'active' : ''} onClick={() => setFilter(`tag:${tag}`)}><Tag size={15} />{tag}</button>)}</nav></>}
         <div className="sidebar-spacer" />
         <nav className="sidebar-nav"><button className={filter === 'trash' ? 'active' : ''} onClick={() => setFilter('trash')}><Trash2 size={17} />回收站<span>{documents.filter((item) => item.deletedAt).length || ''}</span></button></nav>
-        <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>资料保存在此浏览器</small></div><HardDrive size={14} /></div>
+        <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>{localStorageLabel}</small></div><HardDrive size={14} /></div>
       </aside>
       <main className="library-main">
-        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1><p className="library-subtitle">{subtitle}</p></div><div className="library-header-actions"><BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create}><Plus size={17} />新建思维导图</button>}</div></header>
+        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1><p className="library-subtitle">{subtitle}</p></div><div className="library-header-actions">{installPrompt && <button className="secondary-button install-app-button" onClick={() => void installApp()} title="安装后可从桌面或开始菜单打开"><Download size={16} />安装到电脑</button>}<BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create} title="Ctrl + N"><Plus size={17} />新建思维导图</button>}</div></header>
         <section className="library-overview" aria-label="知识库概览">
           <div><FileText size={17} /><span><strong>{activeDocuments.length}</strong> 份导图</span></div>
           <div><GitBranch size={17} /><span><strong>{totalNodeCount}</strong> 个节点</span></div>
@@ -225,11 +270,11 @@ export function LibraryPage() {
           <div className="library-overview-tip"><BookOpen size={17} /><span>打开导图后，可把 PDF 直接拖到主题上</span></div>
           <div className="library-overview-safe"><ShieldCheck size={16} />自动保存到本地</div>
         </section>
-        <div className="library-toolbar"><label className="search-field"><Search size={17} /><input aria-label="搜索文档" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /></label><div className="view-switch"><button className={viewMode === 'list' ? 'active' : ''} aria-label="列表视图" onClick={() => changeViewMode('list')}><List size={17} /></button><button className={viewMode === 'grid' ? 'active' : ''} aria-label="卡片视图" onClick={() => changeViewMode('grid')}><LayoutGrid size={17} /></button></div></div>
+        <div className="library-toolbar"><label className="search-field"><Search size={17} /><input ref={searchInputRef} aria-label="搜索文档" aria-keyshortcuts="Control+K" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /><kbd>Ctrl K</kbd></label><div className="view-switch" aria-label="切换文档布局"><button className={viewMode === 'list' ? 'active' : ''} aria-label="列表视图" onClick={() => changeViewMode('list')}><List size={17} /></button><button className={viewMode === 'grid' ? 'active' : ''} aria-label="卡片视图" onClick={() => changeViewMode('grid')}><LayoutGrid size={17} /></button></div></div>
         <section className={viewMode === 'grid' ? 'document-grid' : 'document-list'}>
           {viewMode === 'list' && <div className="document-list-head"><span>名称</span><span>文件夹</span><span>最近修改</span><span /></div>}
           {visibleDocuments.map((document) => <DocumentRow key={document.id} document={document} folders={folders} inTrash={filter === 'trash'} open={open} viewMode={viewMode} />)}
-          {!visibleDocuments.length && <div className="empty-state"><Search size={24} /><strong>{filter === 'trash' ? '回收站是空的' : '没有找到相关内容'}</strong><span>{filter === 'trash' ? '删除的文档会暂存在这里' : '试试更短的关键词'}</span></div>}
+          {!visibleDocuments.length && <div className="empty-state"><Search size={24} /><strong>{filter === 'trash' ? '回收站是空的' : query ? '没有找到相关内容' : '这里还没有思维导图'}</strong><span>{filter === 'trash' ? '删除的文档会暂存在这里' : query ? '试试更短的关键词，或按 Esc 清空搜索' : '创建第一份导图，开始整理你的想法'}</span>{filter !== 'trash' && !query && <button className="secondary-button" onClick={create}><Plus size={15} />新建思维导图</button>}</div>}
         </section>
       </main>
     </div>

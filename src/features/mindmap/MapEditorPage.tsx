@@ -51,6 +51,10 @@ export function MapEditorPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [fileDropTargetId, setFileDropTargetId] = useState<string>()
   const [canvasScale, setCanvasScale] = useState(1)
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem('zhijian-inspector-width'))
+    return Number.isFinite(saved) && saved >= 300 && saved <= 520 ? saved : 360
+  })
   const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
   const papers = usePaperStore((state) => state.papers)
   const paperAnnotations = usePaperStore((state) => state.annotations)
@@ -209,6 +213,35 @@ export function MapEditorPage() {
     }
   }, [editNewNode, setFocusRoot, setInspectorOpen, setSelectedNode])
 
+  const startInspectorResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const move = (pointerEvent: PointerEvent) => {
+      const nextWidth = Math.min(520, Math.max(300, window.innerWidth - pointerEvent.clientX))
+      setInspectorWidth(nextWidth)
+      window.localStorage.setItem('zhijian-inspector-width', String(nextWidth))
+    }
+    const stop = () => {
+      globalThis.document.body.classList.remove('is-resizing-inspector')
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    globalThis.document.body.classList.add('is-resizing-inspector')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop, { once: true })
+  }
+
+  useEffect(() => {
+    const handleWindowShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || (event.key !== ']' && event.code !== 'BracketRight')) return
+      const target = event.target as HTMLElement | null
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+      event.preventDefault()
+      command('focus')
+    }
+    window.addEventListener('keydown', handleWindowShortcut)
+    return () => window.removeEventListener('keydown', handleWindowShortcut)
+  }, [command])
+
   const attachFiles = async (files: FileList | File[], nodeId: string) => {
     if (!document) return
     const store = useDocumentStore.getState()
@@ -272,7 +305,7 @@ export function MapEditorPage() {
     if (mod && event.key.toLowerCase() === 'x') { event.preventDefault(); command('cut'); return }
     if (mod && event.key.toLowerCase() === 'v') { event.preventDefault(); command('paste'); return }
     if (mod && event.key.toLowerCase() === 'd') { event.preventDefault(); command('duplicate'); return }
-    if (mod && event.key === ']') { event.preventDefault(); command('focus'); return }
+    if (mod && (event.key === ']' || event.code === 'BracketRight')) { event.preventDefault(); command('focus'); return }
     if (mod && event.shiftKey && event.key === '.') { event.preventDefault(); command('toggleSiblings'); return }
     if (event.altKey && event.key === '.') { event.preventDefault(); command('toggle'); return }
     if (event.key === '?') { event.preventDefault(); setHelpOpen(true); return }
@@ -288,7 +321,7 @@ export function MapEditorPage() {
   const isRoot = selectedNodeId === document.root.id
 
   return (
-    <div className={`editor-shell ${inspectorOpen ? 'with-inspector' : ''}`}>
+    <div className={`editor-shell ${inspectorOpen ? 'with-inspector' : ''}`} style={inspectorOpen ? { gridTemplateColumns: `minmax(480px, 1fr) ${inspectorWidth}px` } : undefined}>
       <header className="editor-toolbar">
         <button className="icon-button" onClick={() => navigate('/library')} aria-label="返回知识库" title="返回知识库"><ArrowLeft size={19} /></button>
         <div className="toolbar-divider" />
@@ -296,6 +329,10 @@ export function MapEditorPage() {
         <div className={`save-status status-${saveStatus}`}>{activeSave.icon}<span>{activeSave.label}</span></div>
         <span className="document-node-count">{countNodes(document.root)} 个节点</span>
         <div className="toolbar-spacer" />
+        <button className="toolbar-action-button add-topic-button" onClick={() => {
+          if (!selectedNodeId) setSelectedNode(document.root.id)
+          window.setTimeout(() => command('child'), 0)
+        }} aria-label="新增子主题" title="在选中主题下添加子主题（Tab）"><Plus size={16} /><span>子主题</span></button>
         <button className={`toolbar-action-button ${searchOpen ? 'active' : ''}`} onClick={() => setSearchOpen(!searchOpen)} aria-label="搜索" title="搜索节点（Ctrl + F）"><Search size={16} /><span>搜索</span></button>
         <button className={`toolbar-action-button ${inspectorOpen ? 'active' : ''}`} onClick={() => setInspectorOpen(!inspectorOpen)} aria-label="节点详情" title="打开节点详情"><PanelRight size={16} /><span>详情</span></button>
         <button className="icon-button" onClick={() => setHelpOpen(true)} aria-label="操作指南" title="操作指南（?）"><CircleHelp size={18} /></button>
@@ -408,7 +445,7 @@ export function MapEditorPage() {
           </div>
         </main>
       </NodeContextMenu>
-      {inspectorOpen && <Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} /></Suspense>}
+      {inspectorOpen && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} /></Suspense></>}
       <HistoryDialog document={document} open={historyOpen} onOpenChange={setHistoryOpen} />
       <ImportMarkdownDialog open={importOpen} onOpenChange={setImportOpen} onImport={importMarkdown} />
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />

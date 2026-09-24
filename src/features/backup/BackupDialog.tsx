@@ -5,6 +5,8 @@ import { createLocalBackup, restoreLocalBackup, saveBackupFile } from '../../ser
 import { flushLocalPersistence } from '../../services/persistence/localPersistence'
 
 export function BackupDialog() {
+  const isDesktopApp = window.location.protocol === 'app:'
+  const storageLocation = isDesktopApp ? '此电脑应用' : '当前浏览器'
   const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -28,7 +30,7 @@ export function BackupDialog() {
 
   const importBackup = async (file?: File) => {
     if (!file) return
-    if (!window.confirm('恢复备份会替换当前浏览器中的全部 ResearchMind 数据。确定继续吗？')) {
+    if (!window.confirm(`恢复备份会替换${storageLocation}中的全部 ResearchMind 数据。确定继续吗？`)) {
       if (inputRef.current) inputRef.current.value = ''
       return
     }
@@ -69,7 +71,7 @@ export function BackupDialog() {
             </button>
             <input ref={inputRef} className="visually-hidden" type="file" accept=".researchmind,application/json" onChange={(event) => void importBackup(event.target.files?.[0])} />
           </div>
-          <div className="backup-note"><ShieldCheck size={16} /><span>所有资料默认只保存在当前浏览器中。定期把备份文件放入百度网盘，可防止设备损坏或浏览器数据被清除造成丢失。</span></div>
+          <div className="backup-note"><ShieldCheck size={16} /><span>所有资料默认只保存在{storageLocation}中。定期把备份文件放入百度网盘，可防止设备损坏或本地数据被清除造成丢失。</span></div>
           {message && <p className="backup-message" role="status"><RotateCcw size={14} />{message}</p>}
         </Dialog.Content>
       </Dialog.Portal>

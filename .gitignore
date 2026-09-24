@@ -14,6 +14,7 @@ dist-ssr
 coverage
 playwright-report
 test-results
+release
 
 # Editor directories and files
 .vscode/*
@@ -25,3 +26,5 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
