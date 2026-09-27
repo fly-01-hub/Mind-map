@@ -467,7 +467,7 @@ export function MapEditorPage() {
             event.preventDefault()
             event.stopPropagation()
             setSelectedNode(anchor.id)
-            adapterRef.current?.beginEdit(anchor.id)
+            adapterRef.current?.beginEdit(anchor.id, { x: event.clientX, y: event.clientY })
           }}
           onContextMenuCapture={(event) => {
             if (event.detail === 731) return

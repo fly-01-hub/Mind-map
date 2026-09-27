@@ -60,25 +60,9 @@ export class MindMapEngineAdapter {
         name: 'Paper',
         type: 'light',
         palette: ['#768a7a', '#8a7d70', '#707f8d', '#8c7d88'],
-        generateMainBranch: ({ pT, pL, pW, pH, cT, cL, cH }) => {
-          const startX = pL + pW
-          const startY = pT + pH / 2
-          const endX = cL
-          const endY = cT + cH / 2
-          const curve = Math.max(34, (endX - startX) * 0.42)
-          return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
-        },
-        generateSubBranch: ({ pT, pL, pW, pH, cT, cL, cH }) => {
-          const startX = pL + pW
-          const startY = pT + pH / 2
-          const endX = cL
-          const endY = cT + cH / 2
-          const curve = Math.max(24, (endX - startX) * 0.46)
-          return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
-        },
         cssVar: {
-          '--node-gap-x': '40px', '--node-gap-y': '17px',
-          '--main-gap-x': '72px', '--main-gap-y': '30px',
+          '--node-gap-x': '40px', '--node-gap-y': '13px',
+          '--main-gap-x': '72px', '--main-gap-y': '20px',
           '--main-color': '#24332b', '--main-bgcolor': '#ffffff',
           '--main-bgcolor-transparent': 'rgba(255,255,255,.8)',
           '--main-border': '1px solid #dfe4df', '--color': '#38443d',
@@ -122,9 +106,39 @@ export class MindMapEngineAdapter {
     this.engine.destroy()
   }
 
-  beginEdit(id: string) {
+  beginEdit(id: string, caretPoint?: { x: number; y: number }) {
     const element = this.safeFind(id)
-    if (element) void this.engine.beginEdit(element)
+    if (!element) return
+    void this.engine.beginEdit(element).then(() => {
+      if (!caretPoint) return
+      requestAnimationFrame(() => {
+        const input = this.engine.nodes.querySelector<HTMLElement>('#input-box')
+        if (!input) return
+        input.focus()
+        const caretDocument = document as Document & {
+          caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+          caretRangeFromPoint?: (x: number, y: number) => Range | null
+        }
+        const position = caretDocument.caretPositionFromPoint?.(caretPoint.x, caretPoint.y)
+        let range: Range | undefined
+        if (position && input.contains(position.offsetNode)) {
+          range = document.createRange()
+          range.setStart(position.offsetNode, position.offset)
+          range.collapse(true)
+        } else {
+          const fallback = caretDocument.caretRangeFromPoint?.(caretPoint.x, caretPoint.y)
+          if (fallback && input.contains(fallback.startContainer)) {
+            fallback.collapse(true)
+            range = fallback
+          }
+        }
+        if (range) {
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        }
+      })
+    })
   }
 
   select(id: string) {
