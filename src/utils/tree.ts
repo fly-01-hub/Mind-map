@@ -71,6 +71,17 @@ export function removeSubtree(root: NodeData, nodeId: string): NodeData {
   })
 }
 
+export function removeSubtrees(root: NodeData, nodeIds: Iterable<string>): NodeData {
+  const removed = new Set(nodeIds)
+  removed.delete(root.id)
+  if (!removed.size) return root
+  const prune = (node: NodeData): NodeData => ({
+    ...node,
+    children: node.children.filter((child) => !removed.has(child.id)).map(prune),
+  })
+  return normalizeOrders(prune(root))
+}
+
 export function removeNodeKeepChildren(root: NodeData, nodeId: string): NodeData {
   if (root.id === nodeId) return root
   const match = findParent(root, nodeId)

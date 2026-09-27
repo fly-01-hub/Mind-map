@@ -45,7 +45,7 @@ export function ShortcutHelpDialog({ open, onOpenChange }: { open: boolean; onOp
           <div className="shortcut-guide">
             <section className="shortcut-feature">
               <MousePointer2 size={18} />
-              <div><strong>选择与拖动</strong><span>单击选择主题；拖动主题可调整父级；右键打开完整命令菜单。</span></div>
+              <div><strong>选择与拖动</strong><span>单击选择、双击编辑主题；拖动主题可调整父级。按住鼠标中键拖动画布；左键从空白处拖框可删除框选主题，向下只删完全框住的主题，向上会删碰到的主题，可用 Ctrl + Z 撤销。右键打开命令菜单。</span></div>
             </section>
             <section className="shortcut-feature">
               <FileText size={18} />

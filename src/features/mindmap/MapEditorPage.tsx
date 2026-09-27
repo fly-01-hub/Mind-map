@@ -41,6 +41,8 @@ export function MapEditorPage() {
   const adapterRef = useRef<MindMapEngineAdapter | undefined>(undefined)
   const composingRef = useRef(false)
   const pendingEditRef = useRef<string | undefined>(undefined)
+  const panPointerRef = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined)
+  const selectionDragRef = useRef<{ x: number; y: number; endX: number; endY: number } | undefined>(undefined)
   const handledNavigationRef = useRef('')
   const focusedNavigationRef = useRef('')
   const [engineReady, setEngineReady] = useState(false)
@@ -51,6 +53,7 @@ export function MapEditorPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [fileDropTargetId, setFileDropTargetId] = useState<string>()
   const [canvasScale, setCanvasScale] = useState(1)
+  const [isPanning, setIsPanning] = useState(false)
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(window.localStorage.getItem('zhijian-inspector-width'))
     return Number.isFinite(saved) && saved >= 300 && saved <= 520 ? saved : 360
@@ -230,6 +233,31 @@ export function MapEditorPage() {
     window.addEventListener('pointerup', stop, { once: true })
   }
 
+  const finishSelectionDelete = (startX: number, startY: number, endX: number, endY: number) => {
+    if (Math.hypot(endX - startX, endY - startY) < 8) return
+    const bounds = {
+      left: Math.min(startX, endX), right: Math.max(startX, endX),
+      top: Math.min(startY, endY), bottom: Math.max(startY, endY),
+    }
+    const containsAll = endY >= startY
+    const nodeIds = Array.from(canvasRef.current?.querySelectorAll<HTMLElement>('.me-tpc') ?? [])
+      .filter((topic) => !topic.closest('.me-root'))
+      .filter((topic) => {
+        const rect = topic.getBoundingClientRect()
+        if (!rect.width || !rect.height) return false
+        return containsAll
+          ? rect.left >= bounds.left && rect.right <= bounds.right && rect.top >= bounds.top && rect.bottom <= bounds.bottom
+          : rect.left <= bounds.right && rect.right >= bounds.left && rect.top <= bounds.bottom && rect.bottom >= bounds.top
+      })
+      .map((topic) => (topic as HTMLElement & { nodeObj?: { id?: string } }).nodeObj?.id)
+      .filter((nodeId): nodeId is string => Boolean(nodeId))
+    if (!nodeIds.length) return
+    adapterRef.current?.clearSelection()
+    useDocumentStore.getState().removeMany(nodeIds)
+    setSelectedNode(undefined)
+    setNodeAnchor(undefined)
+  }
+
   useEffect(() => {
     const handleWindowShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || (event.key !== ']' && event.code !== 'BracketRight')) return
@@ -352,10 +380,57 @@ export function MapEditorPage() {
       {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => { setSelectedNode(result.nodeId); setFocusRoot(result.nodeId); setSearchOpen(false); setSearchQuery('') }}><strong>{result.nodeTitle}</strong><span>{result.field === 'note' ? '笔记' : result.field === 'tag' ? '标签' : '标题'} · {result.excerpt}</span></button>)}{!searchResults.length && <p>没有找到相关节点</p>}</div>}</div>}
       <NodeContextMenu onCommand={command} isRoot={isRoot} hasClipboard={Boolean(useDocumentStore.getState().clipboard)}>
         <main
-          className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''}`}
+          className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''} ${isPanning ? 'is-panning' : ''}`}
           tabIndex={0}
           onPointerDownCapture={(event) => {
             if (!(event.target as HTMLElement).isContentEditable) event.currentTarget.focus({ preventScroll: true })
+            const target = event.target as HTMLElement
+            if (event.button === 1) {
+              event.preventDefault()
+              event.nativeEvent.stopImmediatePropagation()
+              panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+              event.currentTarget.setPointerCapture(event.pointerId)
+              setIsPanning(true)
+              return
+            }
+            if (event.button === 0 && target.classList.contains('map-container')) {
+              selectionDragRef.current = { x: event.clientX, y: event.clientY, endX: event.clientX, endY: event.clientY }
+            }
+          }}
+          onPointerMoveCapture={(event) => {
+            const pan = panPointerRef.current
+            if (pan?.pointerId === event.pointerId) {
+              event.preventDefault()
+              event.nativeEvent.stopImmediatePropagation()
+              adapterRef.current?.panBy(event.clientX - pan.x, event.clientY - pan.y)
+              panPointerRef.current = { ...pan, x: event.clientX, y: event.clientY }
+              return
+            }
+            const selection = selectionDragRef.current
+            if (selection) selectionDragRef.current = { ...selection, endX: event.clientX, endY: event.clientY }
+          }}
+          onPointerUpCapture={(event) => {
+            const pan = panPointerRef.current
+            if (pan?.pointerId === event.pointerId) {
+              event.preventDefault()
+              event.nativeEvent.stopImmediatePropagation()
+              panPointerRef.current = undefined
+              setIsPanning(false)
+              return
+            }
+            const selection = selectionDragRef.current
+            selectionDragRef.current = undefined
+            if (selection) {
+              const endX = event.clientX
+              const endY = event.clientY
+              window.setTimeout(() => finishSelectionDelete(selection.x, selection.y, endX, endY), 0)
+            }
+          }}
+          onLostPointerCapture={() => {
+            if (panPointerRef.current) {
+              panPointerRef.current = undefined
+              setIsPanning(false)
+            }
           }}
           onKeyDownCapture={handleKeyDown}
           onCompositionStartCapture={() => { composingRef.current = true }}
@@ -385,6 +460,14 @@ export function MapEditorPage() {
             const targetId = anchor?.id ?? fileDropTargetId ?? selectedNodeId ?? document.root.id
             setFileDropTargetId(undefined)
             void attachFiles(event.dataTransfer.files, targetId)
+          }}
+          onDoubleClickCapture={(event) => {
+            const anchor = adapterRef.current?.resolveNode(event.target)
+            if (!anchor) return
+            event.preventDefault()
+            event.stopPropagation()
+            setSelectedNode(anchor.id)
+            adapterRef.current?.beginEdit(anchor.id)
           }}
           onContextMenuCapture={(event) => {
             if (event.detail === 731) return
@@ -431,7 +514,7 @@ export function MapEditorPage() {
             }}>{nodeAnchor.collapsed ? <Plus size={12} /> : <Minus size={12} />}</button>}
             {nodeAnchor.id === selectedNodeId && <button className="node-mini-button add-button" aria-label="添加子主题" onClick={() => command('child')}><Plus size={14} /></button>}
           </div>}
-          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '将 PDF 拖到主题即可建立文献节点'}</span><kbd>?</kbd></button>}
+          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '双击编辑 · 中键平移 · 左键拖框删除 · 拖入 PDF'}</span><kbd>?</kbd></button>}
           <div className="canvas-controls">
             <button onClick={() => adapterRef.current?.center()} title="居中" aria-label="居中"><Focus size={16} /></button>
             <button onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布" aria-label="适应画布"><Maximize2 size={16} /></button>

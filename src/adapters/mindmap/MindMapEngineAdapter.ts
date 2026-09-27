@@ -52,6 +52,7 @@ export class MindMapEngineAdapter {
       contextMenu: false,
       toolBar: false,
       keypress: false,
+      mouseSelectionButton: 0,
       allowUndo: false,
       overflowHidden: false,
       alignment: 'nodes',
@@ -59,9 +60,25 @@ export class MindMapEngineAdapter {
         name: 'Paper',
         type: 'light',
         palette: ['#768a7a', '#8a7d70', '#707f8d', '#8c7d88'],
+        generateMainBranch: ({ pT, pL, pW, pH, cT, cL, cH }) => {
+          const startX = pL + pW
+          const startY = pT + pH / 2
+          const endX = cL
+          const endY = cT + cH / 2
+          const curve = Math.max(34, (endX - startX) * 0.42)
+          return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
+        },
+        generateSubBranch: ({ pT, pL, pW, pH, cT, cL, cH }) => {
+          const startX = pL + pW
+          const startY = pT + pH / 2
+          const endX = cL
+          const endY = cT + cH / 2
+          const curve = Math.max(24, (endX - startX) * 0.46)
+          return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
+        },
         cssVar: {
-          '--node-gap-x': '40px', '--node-gap-y': '13px',
-          '--main-gap-x': '72px', '--main-gap-y': '20px',
+          '--node-gap-x': '40px', '--node-gap-y': '17px',
+          '--main-gap-x': '72px', '--main-gap-y': '30px',
           '--main-color': '#24332b', '--main-bgcolor': '#ffffff',
           '--main-bgcolor-transparent': 'rgba(255,255,255,.8)',
           '--main-border': '1px solid #dfe4df', '--color': '#38443d',
@@ -141,6 +158,7 @@ export class MindMapEngineAdapter {
     return this.engine.scaleVal
   }
   center() { this.engine.toCenter() }
+  panBy(x: number, y: number) { this.engine.move(x, y) }
 
   getScale() { return this.engine.scaleVal }
 

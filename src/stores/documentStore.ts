@@ -3,7 +3,7 @@ import { mockDocuments } from '../data/mockDocuments'
 import type { ClipboardPayload, FolderData, MindMapDocument, NodeData } from '../types/mindmap'
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
-  expandPathToNode, findParent, mapNode, promoteNode, removeNodeKeepChildren, removeSubtree, replaceSubtree,
+  expandPathToNode, findParent, mapNode, promoteNode, removeNodeKeepChildren, removeSubtree, removeSubtrees, replaceSubtree,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
 
@@ -35,6 +35,7 @@ export interface DocumentState {
   insertSibling: (nodeId: string) => string | undefined
   promote: (nodeId: string) => void
   remove: (nodeId: string) => void
+  removeMany: (nodeIds: string[]) => void
   removeOnly: (nodeId: string) => void
   duplicate: (nodeId: string) => string | undefined
   updateNode: (nodeId: string, patch: Partial<NodeData>) => void
@@ -155,6 +156,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
   promote: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, promoteNode(document.root, nodeId)))),
   remove: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtree(document.root, nodeId)))),
+  removeMany: (nodeIds) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtrees(document.root, nodeIds)))),
   removeOnly: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeNodeKeepChildren(document.root, nodeId)))),
   duplicate: (nodeId) => {
     const current = get().documents.find((document) => document.id === get().activeDocumentId)
