@@ -490,6 +490,10 @@ export function MapEditorPage() {
             setNodeAnchor(anchor ?? (selectedNodeId ? adapterRef.current?.anchorFor(selectedNodeId) : undefined))
           }}
           onClick={(event) => {
+            // Keep focus and the browser's text selection inside the inline editor.
+            // Focusing the stage here would discard a drag-selected text range before
+            // the user can delete it with Backspace.
+            if ((event.target as HTMLElement).closest('#input-box[contenteditable="true"]')) return
             event.currentTarget.focus({ preventScroll: true })
             const anchor = adapterRef.current?.resolveNode(event.target)
             if (anchor) {

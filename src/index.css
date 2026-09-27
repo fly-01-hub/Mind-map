@@ -145,7 +145,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mindmap-canvas .me-tpc { max-width: 290px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; font-family: inherit; font-size: 13px; box-shadow: 0 2px 8px rgba(47, 62, 52, .05); transition: box-shadow .14s ease, border-color .14s ease; }
 .mindmap-canvas .me-root > .me-parent > .me-tpc { font-size: 15px; font-weight: 650; box-shadow: 0 7px 22px rgba(35, 55, 42, .18); }
 .mindmap-canvas .selected { box-shadow: 0 0 0 2px #93a99a, 0 5px 15px rgba(44, 64, 50, .11) !important; }
-.mindmap-canvas #input-box[contenteditable] { min-width: 80px; outline: 0; border: 1px solid #718d79; border-radius: 7px; box-shadow: 0 0 0 2px rgba(113, 141, 121, .16), 0 8px 24px rgba(40, 62, 47, .14) !important; }
+.mindmap-canvas #input-box[contenteditable] { min-width: 80px; -webkit-user-select: text !important; user-select: text !important; cursor: text; outline: 0; border: 1px solid #718d79; border-radius: 7px; box-shadow: 0 0 0 2px rgba(113, 141, 121, .16), 0 8px 24px rgba(40, 62, 47, .14) !important; }
 .node-quick-actions { position: fixed; z-index: 25; display: flex; align-items: center; gap: 5px; transform: translateY(-50%); }
 .node-mini-button { width: 23px; height: 23px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid #d5ddd6; color: #637168; background: rgba(255, 255, 255, .96); box-shadow: 0 3px 10px rgba(39, 54, 44, .1); cursor: pointer; }
 .node-mini-button:hover { color: #31463a; border-color: #a9b9ac; transform: scale(1.06); }
