@@ -46,6 +46,8 @@ npm run dev
 
 运行 `release/ResearchMind-Setup-1.0.0-x64.exe`，按向导选择安装目录。桌面版使用固定的 `app://researchmind` 本地来源，数据保存在 Windows 当前用户的 ResearchMind 应用数据目录中。
 
+当前个人版本未购买商业代码签名证书。Windows 首次运行时可能显示 SmartScreen 提醒；请确认文件名和来源为本项目后，点击“更多信息”→“仍要运行”。不要从非本仓库或非本人电脑生成的链接下载安装包。
+
 网页和桌面版的数据空间彼此独立。首次切换时，请先在旧版本创建 `.researchmind` 备份，再到新版本执行“从备份恢复”。
 
 重新生成安装包：
@@ -84,6 +86,8 @@ npx playwright install chromium
 ```
 
 ## 6. 部署到 Vercel
+
+当前固定访问地址：<https://temporary-snappy-aurora-yy1owqr.vercel.app>
 
 1. 把仓库推送到 Git 平台。
 2. 在 Vercel 新建项目并导入仓库，Framework Preset 选择 Vite。
