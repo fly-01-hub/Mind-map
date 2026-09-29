@@ -12,6 +12,8 @@
 - Node Inspector：Markdown/LaTeX/代码、待办、标签、链接、颜色、图标、PDF/图片/普通附件
 - IndexedDB 自动保存、刷新恢复和每份文档最近 50 个历史版本
 - 全文搜索、收藏、嵌套文件夹、拖拽归档、回收站
+- 概要、跨主题关联线、四套导图配色、紧凑布局、只读浏览与演示模式
+- Markdown、OPML、FreeMind、现代 XMind 导入；Markdown、OPML、FreeMind、XMind、HTML、PNG 与打印/PDF 导出
 - Markdown 导入/导出，以及官方 Mind Elixir 导出插件生成完整 2× PNG
 - PDF 可从资源管理器直接拖到导图节点，自动生成论文子节点；内置 PDF.js 分页阅读、全文搜索、缩放、阅读进度恢复与离线保存
 - PDF 高亮、下划线和批注；标注可生成思维导图节点并在节点与原文之间双向定位
@@ -44,7 +46,7 @@ npm run dev
 
 ### 使用 `.exe` 安装包
 
-运行 `release/ResearchMind-Setup-1.1.0-x64.exe`，按向导选择安装目录。桌面版使用固定的 `app://researchmind` 本地来源，数据保存在 Windows 当前用户的 ResearchMind 应用数据目录中。
+运行 `release/ResearchMind-Setup-1.2.0-x64.exe`，按向导选择安装目录。桌面版使用固定的 `app://researchmind` 本地来源，数据保存在 Windows 当前用户的 ResearchMind 应用数据目录中。
 
 当前个人版本未购买商业代码签名证书。Windows 首次运行时可能显示 SmartScreen 提醒；请确认文件名和来源为本项目后，点击“更多信息”→“仍要运行”。不要从非本仓库或非本人电脑生成的链接下载安装包。
 

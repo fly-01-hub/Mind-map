@@ -36,6 +36,7 @@ export const documentRepository = {
     const version: DocumentVersion = {
       id: crypto.randomUUID(), documentId: document.id, version: document.version,
       title: document.title, root: structuredClone(document.root),
+      arrows: structuredClone(document.arrows ?? []), summaries: structuredClone(document.summaries ?? []),
       createdAt: new Date().toISOString(), reason,
     }
     await appDatabase.versions.add(version)

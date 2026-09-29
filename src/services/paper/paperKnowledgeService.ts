@@ -70,7 +70,11 @@ export const paperKnowledgeService = {
       documents: latest.documents.map((item) => item.id === document.id ? updatedDocument : item),
       histories: {
         ...latest.histories,
-        [document.id]: { past: [...history.past, structuredClone(document.root)].slice(-50), future: [] },
+        [document.id]: { past: [...history.past, structuredClone({
+          root: document.root,
+          arrows: document.arrows ?? [],
+          summaries: document.summaries ?? [],
+        })].slice(-50), future: [] },
       },
     }))
     useSaveStore.getState().markLocal()

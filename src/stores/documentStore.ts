@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { mockDocuments } from '../data/mockDocuments'
-import type { ClipboardPayload, FolderData, MindMapDocument, NodeData } from '../types/mindmap'
+import type { ClipboardPayload, FolderData, MapArrow, MapSummary, MindMapDocument, NodeData } from '../types/mindmap'
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
   expandPathToNode, findParent, indentNode, mapNode, mergeNodeInto, moveSubtreeRelative, promoteNode,
@@ -9,7 +9,8 @@ import {
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
 
-export interface HistoryState { past: NodeData[]; future: NodeData[] }
+interface DocumentSnapshot { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] }
+export interface HistoryState { past: DocumentSnapshot[]; future: DocumentSnapshot[] }
 
 export interface DocumentState {
   documents: MindMapDocument[]
@@ -22,6 +23,7 @@ export interface DocumentState {
   hydrate: (documents: MindMapDocument[], folders: FolderData[]) => void
   createDocument: (title?: string) => MindMapDocument
   renameDocument: (id: string, title: string) => void
+  updateMapAppearance: (id: string, appearance: Pick<MindMapDocument, 'mapTheme' | 'compactMap'>) => void
   toggleFavorite: (id: string) => void
   createFolder: (name: string, parentId?: string) => string
   renameFolder: (id: string, name: string) => void
@@ -30,8 +32,9 @@ export interface DocumentState {
   trashDocument: (id: string) => void
   restoreDocument: (id: string) => void
   removeDocumentFromState: (id: string) => void
-  restoreVersion: (documentId: string, title: string, root: NodeData, version: number) => void
+  restoreVersion: (documentId: string, title: string, root: NodeData, version: number, arrows?: MapArrow[], summaries?: MapSummary[]) => void
   commitTree: (root: NodeData) => void
+  commitMap: (root: NodeData, arrows: MapArrow[], summaries: MapSummary[]) => void
   replaceFocusedTree: (subtree: NodeData, focusRootId?: string) => void
   insertChild: (parentId: string, title?: string) => string | undefined
   insertSibling: (nodeId: string, title?: string) => string | undefined
@@ -48,6 +51,8 @@ export interface DocumentState {
   duplicate: (nodeId: string) => string | undefined
   updateNode: (nodeId: string, patch: Partial<NodeData>) => void
   updateMany: (nodeIds: string[], patch: Partial<NodeData> | ((node: NodeData) => Partial<NodeData>)) => void
+  addArrow: (fromId: string, toId: string, label?: string) => string | undefined
+  addSummary: (nodeIds: string[], label?: string) => string | undefined
   revealNode: (nodeId: string) => void
   toggleSiblingChildren: (nodeId: string) => void
   copy: (nodeId: string) => void
@@ -60,6 +65,11 @@ export interface DocumentState {
 }
 
 const clone = (node: NodeData): NodeData => structuredClone(node)
+const snapshot = (document: MindMapDocument): DocumentSnapshot => structuredClone({
+  root: document.root,
+  arrows: document.arrows ?? [],
+  summaries: document.summaries ?? [],
+})
 
 function updateActive(
   state: DocumentState,
@@ -75,14 +85,34 @@ function updateActive(
   const histories = { ...state.histories }
   if (recordHistory) {
     const history = histories[id] ?? { past: [], future: [] }
-    histories[id] = { past: [...history.past, clone(current.root)].slice(-50), future: [] }
+    histories[id] = { past: [...history.past, snapshot(current)].slice(-50), future: [] }
   }
   useSaveStore.getState().markLocal()
   return { documents: state.documents.map((document) => document.id === id ? next : document), histories }
 }
 
 function withRoot(document: MindMapDocument, root: NodeData): MindMapDocument {
-  return { ...document, root, version: document.version + 1, updatedAt: new Date().toISOString() }
+  const ids = new Set<string>()
+  const collect = (node: NodeData) => {
+    ids.add(node.id)
+    node.children.forEach(collect)
+  }
+  collect(root)
+  const arrows = (document.arrows ?? []).filter((arrow) => ids.has(arrow.from) && ids.has(arrow.to))
+  const summaries = (document.summaries ?? []).flatMap((summary) => {
+    if (summary.nodeIds?.length) {
+      const matches = summary.nodeIds.map((id) => findParent(root, id))
+      if (matches.some((match) => !match)) return []
+      const parentId = matches[0]!.parent.id
+      if (matches.some((match) => match!.parent.id !== parentId)) return []
+      const indexes = matches.map((match) => match!.index).sort((a, b) => a - b)
+      if (indexes.at(-1)! - indexes[0] + 1 !== indexes.length) return []
+      return [{ ...summary, parent: parentId, start: indexes[0], end: indexes.at(-1)! }]
+    }
+    const parent = findNode(root, summary.parent)
+    return parent && summary.start >= 0 && summary.end < parent.children.length ? [summary] : []
+  })
+  return { ...document, root, arrows, summaries, version: document.version + 1, updatedAt: new Date().toISOString() }
 }
 
 function touchDocument(document: MindMapDocument, patch: Partial<MindMapDocument>): MindMapDocument {
@@ -113,6 +143,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       title,
       root: { ...document.root, title, updatedAt: new Date().toISOString() },
     }) : document),
+  })),
+  updateMapAppearance: (id, appearance) => set((state) => ({
+    documents: state.documents.map((document) => document.id === id ? touchDocument(document, appearance) : document),
   })),
   toggleFavorite: (id) => set((state) => ({
     documents: state.documents.map((document) => document.id === id ? touchDocument(document, { isFavorite: !document.isFavorite }) : document),
@@ -150,12 +183,16 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   trashDocument: (id) => set((state) => ({ documents: state.documents.map((document) => document.id === id ? touchDocument(document, { deletedAt: new Date().toISOString() }) : document) })),
   restoreDocument: (id) => set((state) => ({ documents: state.documents.map((document) => document.id === id ? touchDocument(document, { deletedAt: undefined }) : document) })),
   removeDocumentFromState: (id) => set((state) => ({ documents: state.documents.filter((document) => document.id !== id) })),
-  restoreVersion: (documentId, title, root, version) => set((state) => ({
+  restoreVersion: (documentId, title, root, version, arrows = [], summaries = []) => set((state) => ({
     documents: state.documents.map((document) => document.id === documentId ? {
-      ...document, title, root: clone(root), version: Math.max(document.version, version) + 1, updatedAt: new Date().toISOString(),
+      ...document, title, root: clone(root), arrows: structuredClone(arrows), summaries: structuredClone(summaries),
+      version: Math.max(document.version, version) + 1, updatedAt: new Date().toISOString(),
     } : document),
   })),
   commitTree: (root) => set((state) => updateActive(state, (document) => withRoot(document, root))),
+  commitMap: (root, arrows, summaries) => set((state) => updateActive(state, (document) => ({
+    ...withRoot(document, root), arrows: structuredClone(arrows), summaries: structuredClone(summaries),
+  }))),
   replaceFocusedTree: (subtree, focusRootId) => set((state) => updateActive(state, (document) =>
     withRoot(document, focusRootId ? replaceSubtree(document.root, subtree) : subtree))),
   insertChild: (parentId, title) => {
@@ -208,6 +245,37 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
     return withRoot(document, update(document.root))
   })),
+  addArrow: (fromId, toId, label = '关联') => {
+    const document = get().documents.find((item) => item.id === get().activeDocumentId)
+    if (!document || fromId === toId || !findNode(document.root, fromId) || !findNode(document.root, toId)) return
+    const duplicate = document.arrows?.some((arrow) => arrow.from === fromId && arrow.to === toId)
+    if (duplicate) return
+    const id = crypto.randomUUID()
+    set((state) => updateActive(state, (item) => ({
+      ...touchDocument(item, {}),
+      arrows: [...(item.arrows ?? []), { id, label, from: fromId, to: toId }],
+    })))
+    return id
+  },
+  addSummary: (nodeIds, label = '概要') => {
+    const document = get().documents.find((item) => item.id === get().activeDocumentId)
+    if (!document || nodeIds.length < 2) return
+    const matches = nodeIds.map((id) => findParent(document.root, id))
+    if (matches.some((match) => !match)) return
+    const parentId = matches[0]!.parent.id
+    if (matches.some((match) => match!.parent.id !== parentId)) return
+    const indexes = [...new Set(matches.map((match) => match!.index))].sort((a, b) => a - b)
+    if (indexes.length < 2 || indexes.at(-1)! - indexes[0] + 1 !== indexes.length) return
+    const id = crypto.randomUUID()
+    set((state) => updateActive(state, (item) => ({
+      ...touchDocument(item, {}),
+      summaries: [...(item.summaries ?? []), {
+        id, label, parent: parentId, start: indexes[0], end: indexes.at(-1)!,
+        nodeIds: indexes.map((index) => matches.find((match) => match!.index === index)!.parent.children[index].id),
+      }],
+    })))
+    return id
+  },
   revealNode: (nodeId) => set((state) => updateActive(state, (document) => {
     const root = expandPathToNode(document.root, nodeId)
     return root === document.root ? document : withRoot(document, root)
@@ -268,8 +336,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const previous = history.past.at(-1)!
     useSaveStore.getState().markLocal()
     return {
-      documents: state.documents.map((item) => item.id === id ? withRoot(item, clone(previous)) : item),
-      histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [clone(document.root), ...history.future] } },
+      documents: state.documents.map((item) => item.id === id ? {
+        ...withRoot(item, clone(previous.root)), arrows: structuredClone(previous.arrows), summaries: structuredClone(previous.summaries),
+      } : item),
+      histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [snapshot(document), ...history.future] } },
     }
   }),
   redo: () => set((state) => {
@@ -280,8 +350,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const next = history.future[0]
     useSaveStore.getState().markLocal()
     return {
-      documents: state.documents.map((item) => item.id === id ? withRoot(item, clone(next)) : item),
-      histories: { ...state.histories, [id]: { past: [...history.past, clone(document.root)], future: history.future.slice(1) } },
+      documents: state.documents.map((item) => item.id === id ? {
+        ...withRoot(item, clone(next.root)), arrows: structuredClone(next.arrows), summaries: structuredClone(next.summaries),
+      } : item),
+      histories: { ...state.histories, [id]: { past: [...history.past, snapshot(document)], future: history.future.slice(1) } },
     }
   }),
 }))

@@ -2,9 +2,10 @@ import MindElixir, {
   type MindElixirData,
   type NodeObj,
   type Operation,
+  type Theme,
   type Topic,
 } from 'mind-elixir'
-import type { NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
+import type { MapArrow, MapSummary, NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
 import { downloadBlob } from '../../services/export/download'
 import { plainTextFromRichText } from '../../utils/richText'
 
@@ -20,11 +21,12 @@ interface EngineMetadata {
   formula?: string
   icon?: string
   richText?: string
+  table?: NodeData['table']
 }
 
 interface AdapterEvents {
-  onSelectionChange: (id?: string) => void
-  onTreeChange: (root: NodeData, operation: Operation | { name: 'expandNode' }) => void
+  onSelectionChange: (ids: string[]) => void
+  onMapChange: (root: NodeData, arrows: MapArrow[], summaries: MapSummary[], operation: Operation | { name: 'expandNode' }) => void
 }
 
 export interface NodeAnchor {
@@ -42,6 +44,22 @@ const defaultMetadata = (): EngineMetadata => ({
   order: 0, taskStatus: 'none', note: '', attachments: [], style: {},
 })
 
+const baseCss: NonNullable<Theme<EngineMetadata>['cssVar']> = {
+  '--node-gap-x': '40px', '--node-gap-y': '13px', '--main-gap-x': '72px', '--main-gap-y': '20px',
+  '--main-color': '#24332b', '--main-bgcolor': '#ffffff', '--main-bgcolor-transparent': 'rgba(255,255,255,.8)',
+  '--main-border': '1px solid #dfe4df', '--color': '#38443d', '--bgcolor': '#ffffff', '--selected': '#dbe8df',
+  '--accent-color': '#718779', '--root-color': '#f8faf8', '--root-bgcolor': '#263b30', '--root-border-color': '#263b30',
+  '--root-radius': '10px', '--main-radius': '7px', '--topic-padding': '8px 12px', '--panel-color': '#354239',
+  '--panel-bgcolor': '#ffffff', '--panel-border-color': '#e3e8e4', '--map-padding': '72px',
+}
+
+const mapThemes: Record<'paper' | 'ocean' | 'warm' | 'mono', Theme<EngineMetadata>> = {
+  paper: { name: 'Paper', type: 'light', palette: ['#768a7a', '#8a7d70', '#707f8d', '#8c7d88'], cssVar: baseCss },
+  ocean: { name: 'Ocean', type: 'light', palette: ['#4c7890', '#5d8d87', '#6c7fa0', '#4f8c9c'], cssVar: { ...baseCss, '--root-bgcolor': '#28566b', '--root-border-color': '#28566b', '--accent-color': '#4c7890', '--selected': '#dcecf2' } },
+  warm: { name: 'Warm', type: 'light', palette: ['#a77255', '#a98955', '#916a68', '#8e765f'], cssVar: { ...baseCss, '--root-bgcolor': '#6b4635', '--root-border-color': '#6b4635', '--accent-color': '#9a6b50', '--selected': '#f2e5dc' } },
+  mono: { name: 'Mono', type: 'light', palette: ['#68716c', '#7a817d', '#59615d', '#8a908d'], cssVar: { ...baseCss, '--root-bgcolor': '#343a36', '--root-border-color': '#343a36', '--accent-color': '#6b736e', '--selected': '#e4e7e5' } },
+}
+
 export class MindMapEngineAdapter {
   private engine: MindElixir<EngineMetadata>
   private disposed = false
@@ -58,49 +76,33 @@ export class MindMapEngineAdapter {
       allowUndo: false,
       overflowHidden: false,
       alignment: 'nodes',
-      theme: {
-        name: 'Paper',
-        type: 'light',
-        palette: ['#768a7a', '#8a7d70', '#707f8d', '#8c7d88'],
-        cssVar: {
-          '--node-gap-x': '40px', '--node-gap-y': '13px',
-          '--main-gap-x': '72px', '--main-gap-y': '20px',
-          '--main-color': '#24332b', '--main-bgcolor': '#ffffff',
-          '--main-bgcolor-transparent': 'rgba(255,255,255,.8)',
-          '--main-border': '1px solid #dfe4df', '--color': '#38443d',
-          '--bgcolor': '#ffffff', '--selected': '#dbe8df',
-          '--accent-color': '#718779', '--root-color': '#f8faf8',
-          '--root-bgcolor': '#263b30', '--root-border-color': '#263b30',
-          '--root-radius': '10px', '--main-radius': '7px',
-          '--topic-padding': '8px 12px', '--panel-color': '#354239',
-          '--panel-bgcolor': '#ffffff', '--panel-border-color': '#e3e8e4',
-          '--map-padding': '72px',
-        },
-      },
+      theme: mapThemes.paper,
     })
 
-    this.engine.bus.addListener('selectNodes', (nodes) => events.onSelectionChange(nodes.at(-1)?.id))
-    this.engine.bus.addListener('selectNewNode', (node) => events.onSelectionChange(node.id))
-    this.engine.bus.addListener('unselectNodes', () => {
-      if (!this.engine.currentNodes.length) events.onSelectionChange(undefined)
-    })
+    this.engine.bus.addListener('selectNodes', () => events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id)))
+    this.engine.bus.addListener('selectNewNode', (node) => events.onSelectionChange([node.id]))
+    this.engine.bus.addListener('unselectNodes', () => events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id)))
     this.engine.bus.addListener('operation', (operation) => {
       if (this.disposed || operation.name === 'beginEdit') return
-      events.onTreeChange(this.getTree(), operation)
+      const map = this.getMap()
+      events.onMapChange(map.root, map.arrows, map.summaries, operation)
     })
     this.engine.bus.addListener('expandNode', () => {
-      if (!this.disposed) events.onTreeChange(this.getTree(), { name: 'expandNode' })
+      if (!this.disposed) {
+        const map = this.getMap()
+        events.onMapChange(map.root, map.arrows, map.summaries, { name: 'expandNode' })
+      }
     })
   }
 
-  async init(root: NodeData) {
-    await this.engine.init(this.toEngineData(root))
+  async init(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
+    await this.engine.init(this.toEngineData(root, arrows, summaries))
     this.engine.toCenter()
   }
 
-  render(root: NodeData) {
+  render(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
     if (this.disposed) return
-    this.engine.refresh(this.toEngineData(root))
+    this.engine.refresh(this.toEngineData(root, arrows, summaries))
   }
 
   destroy() {
@@ -145,7 +147,15 @@ export class MindMapEngineAdapter {
 
   select(id: string) {
     const element = this.safeFind(id)
-    if (element) this.engine.selectNode(element)
+    if (!element || (this.engine.currentNodes.length === 1 && this.engine.currentNodes[0] === element)) return
+    this.engine.selectNode(element)
+  }
+
+  setSelections(ids: string[]) {
+    this.engine.currentNodes.forEach((node) => node.classList.remove('selected'))
+    const nodes = ids.map((id) => this.safeFind(id)).filter((node): node is Topic<EngineMetadata> => Boolean(node))
+    nodes.forEach((node) => node.classList.add('selected'))
+    this.engine.currentNodes = nodes
   }
 
   reveal(id: string) {
@@ -156,7 +166,34 @@ export class MindMapEngineAdapter {
   }
 
   clearSelection() {
+    if (!this.engine.currentNodes.length && !this.engine.currentArrow && !this.engine.currentSummary) return
     this.engine.clearSelection()
+  }
+
+  setAppearance(theme: 'paper' | 'ocean' | 'warm' | 'mono', compact: boolean) {
+    this.engine.changeTheme(mapThemes[theme], true)
+    this.engine.changeCompact(compact)
+  }
+
+  setReadOnly(readOnly: boolean) {
+    if (readOnly) this.engine.disableEdit()
+    else this.engine.enableEdit()
+  }
+
+  createSummary() {
+    const nodes = [...this.engine.currentNodes]
+    if (nodes.length < 2) return false
+    const parentIds = new Set(nodes.map((node) => node.nodeObj.parent?.id))
+    if (parentIds.size !== 1 || parentIds.has(undefined)) return false
+    this.engine.createSummary()
+    return true
+  }
+
+  createArrow(bidirectional = false) {
+    const nodes = [...this.engine.currentNodes]
+    if (nodes.length !== 2) return false
+    this.engine.createArrow(nodes[0], nodes[1], { bidirectional })
+    return true
   }
 
   toggleExpanded(id: string) {
@@ -222,12 +259,32 @@ export class MindMapEngineAdapter {
     return this.fromEngineNode(this.engine.getData().nodeData)
   }
 
+  getMap(): { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] } {
+    const data = this.engine.getData()
+    return {
+      root: this.fromEngineNode(data.nodeData),
+      arrows: structuredClone((data.arrows ?? []) as MapArrow[]),
+      summaries: structuredClone(data.summaries ?? []),
+    }
+  }
+
   private safeFind(id: string): Topic<EngineMetadata> | undefined {
     try { return this.engine.findEle(id) } catch { return undefined }
   }
 
-  private toEngineData(root: NodeData): MindElixirData<EngineMetadata> {
-    return { nodeData: this.toEngineNode(root), direction: MindElixir.RIGHT }
+  private toEngineData(root: NodeData, arrows: MapArrow[], summaries: MapSummary[]): MindElixirData<EngineMetadata> {
+    const ids = new Set<string>()
+    const collect = (node: NodeData) => {
+      ids.add(node.id)
+      node.children.forEach(collect)
+    }
+    collect(root)
+    return {
+      nodeData: this.toEngineNode(root),
+      arrows: structuredClone(arrows.filter((arrow) => ids.has(arrow.from) && ids.has(arrow.to))),
+      summaries: structuredClone(summaries.filter((summary) => ids.has(summary.parent))),
+      direction: MindElixir.RIGHT,
+    }
   }
 
   private toEngineNode(node: NodeData): NodeObj<EngineMetadata> {
@@ -249,6 +306,7 @@ export class MindMapEngineAdapter {
         node.note ? '▤' : undefined,
         node.code ? '⌘' : undefined,
         node.formula ? '∑' : undefined,
+        node.table ? '▦' : undefined,
         node.attachments.length ? '📎' : undefined,
       ].filter((value): value is string => Boolean(value)),
       hyperLink: node.hyperlink,
@@ -259,6 +317,7 @@ export class MindMapEngineAdapter {
         taskStatus: node.taskStatus, note: node.note,
         attachments: node.attachments, style: node.style, code: node.code, formula: node.formula, icon: node.icon,
         richText: node.richText,
+        table: node.table,
       },
     }
   }
@@ -274,6 +333,7 @@ export class MindMapEngineAdapter {
       taskStatus: metadata.taskStatus, hyperlink: node.hyperLink, note: metadata.note,
       icon: metadata.icon, image: node.image, attachments: metadata.attachments,
       code: metadata.code, formula: metadata.formula,
+      table: metadata.table,
       children: (node.children ?? []).map((child, index) => this.fromEngineNode(child, index)),
     }
   }

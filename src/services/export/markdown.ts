@@ -11,6 +11,7 @@ interface NodeMetadata {
   formula?: string
   style: NodeData['style']
   richText?: string
+  table?: NodeData['table']
 }
 
 export interface MarkdownPaperSource {
@@ -32,7 +33,7 @@ function label(node: NodeData) {
 function metadataLine(node: NodeData) {
   const metadata: NodeMetadata = {
     tags: node.tags, note: node.note, hyperlink: node.hyperlink,
-    taskStatus: node.taskStatus, code: node.code, formula: node.formula, style: node.style, richText: node.richText,
+    taskStatus: node.taskStatus, code: node.code, formula: node.formula, style: node.style, richText: node.richText, table: node.table,
   }
   return `<!-- zhijian-node:${encodeURIComponent(JSON.stringify(metadata))} -->`
 }
@@ -87,6 +88,7 @@ function applyMetadata(node: NodeData, encoded: string) {
       formula: metadata.formula,
       style: metadata.style ?? node.style,
       richText: metadata.richText ? sanitizeRichText(metadata.richText) : undefined,
+      table: metadata.table,
     })
   } catch {
     // Invalid optional metadata never prevents importing the visible outline.

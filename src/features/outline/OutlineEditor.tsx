@@ -1,7 +1,7 @@
 import {
-  Bold, Check, ChevronDown, ChevronRight, Circle, ClipboardPaste, Code, Copy, ExternalLink,
+  Bold, Braces, Check, ChevronDown, ChevronRight, Circle, ClipboardPaste, Code, Copy, ExternalLink,
   EyeOff, FileCode2, GripVertical, Highlighter, Italic, Link2, ListChecks, Paperclip,
-  Plus, Scissors, Sigma, StickyNote, Strikethrough, Trash2, Underline, UnfoldVertical,
+  Plus, Scissors, Sigma, StickyNote, Strikethrough, Table2, Trash2, Underline, UnfoldVertical,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -310,12 +310,13 @@ function OutlineRow({
           document.execCommand('insertText', false, event.clipboardData.getData('text/plain'))
         }}
       />
-      {(node.tags.length > 0 || node.hyperlink || node.note || node.code || node.formula || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
+      {(node.tags.length > 0 || node.hyperlink || node.note || node.code || node.formula || node.table || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
         {node.tags.map((tag) => <span className="outline-meta-tag" key={tag}>#{tag}</span>)}
         {node.hyperlink && <a href={node.hyperlink} target="_blank" rel="noreferrer" title={node.hyperlink}><ExternalLink size={12} />链接</a>}
         {node.note && <button title={node.note} onClick={() => onOpenDetails(node.id)}><StickyNote size={12} />描述</button>}
         {node.code && <button title={node.code} onClick={() => onOpenDetails(node.id)}><FileCode2 size={12} />代码</button>}
         {node.formula && <button title={node.formula} onClick={() => onOpenDetails(node.id)}><Sigma size={12} />公式</button>}
+        {node.table && <button title={`${node.table.headers.length} 列 × ${node.table.rows.length} 行`} onClick={() => onOpenDetails(node.id)}><Table2 size={12} />表格 {node.table.rows.length}</button>}
         {node.image && <button title="此主题包含图片" onClick={() => onOpenDetails(node.id)}><span className="outline-meta-image"><img src={node.image.url} alt="" /></span>图片</button>}
         {node.attachments.length > 0 && <button title={node.attachments.map((item) => item.fileName).join('\n')} onClick={() => onOpenDetails(node.id)}><Paperclip size={12} />{node.attachments.length}</button>}
       </div>}
@@ -501,6 +502,12 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
     }
   }
 
+  const createSummary = () => {
+    if (!useDocumentStore.getState().addSummary(selectedNodeIds)) {
+      window.alert('概要需要选择两个或更多相邻的同级主题。')
+    }
+  }
+
   const createFirst = () => {
     const id = useDocumentStore.getState().insertChild(root.id, '')
     if (!id) return
@@ -557,6 +564,7 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
         <button onClick={() => bulkCopy()} title="复制选中主题"><Copy size={15} />复制</button>
         <button onClick={() => bulkCopy(true)} title="剪切选中主题"><Scissors size={15} />剪切</button>
         {hasClipboard && <button onClick={bulkPaste} title="粘贴到当前主题下"><ClipboardPaste size={15} />粘贴</button>}
+        <button onClick={createSummary} title="为相邻同级主题创建概要"><Braces size={15} />概要</button>
         <button onClick={bulkToggleTasks} title="切换完成状态"><ListChecks size={15} />完成</button>
         <button onClick={bulkToggleCollapsed} title="折叠或展开选中分支"><UnfoldVertical size={15} />折叠</button>
         <button className="danger" onClick={bulkDelete} title="删除选中主题及其下级"><Trash2 size={15} />删除</button>

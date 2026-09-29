@@ -1,6 +1,6 @@
 import {
   Bold, BookOpen, Check, Code2, ExternalLink, File, FileImage, FileText, Italic,
-  Link2, Paperclip, Plus, Quote, Sigma, Tag, Trash2, Underline, Unlink, X,
+  Link2, Paperclip, Plus, Quote, Sigma, Table2, Tag, Trash2, Underline, Unlink, X,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -20,6 +20,22 @@ import 'katex/dist/katex.min.css'
 const colors = ['#ffffff', '#edf3ee', '#eef1f5', '#f6f0e8', '#f3ebef', '#f5eeee']
 const icons = ['📄', '🔬', '💡', '⭐', '📌', '🧠', '📚', '⚠️']
 
+function tableToText(table?: NodeData['table']): string {
+  if (!table) return ''
+  return [table.headers, ...table.rows].map((row) => row.join('\t')).join('\n')
+}
+
+function parseTable(value: string): NodeData['table'] | undefined {
+  const rows = value.split(/\r?\n/).map((line) => {
+    const cells = line.includes('\t') ? line.split('\t') : line.split('|')
+    return cells.map((cell) => cell.trim()).filter((cell, index) => cell || (index > 0 && index < cells.length - 1))
+  }).filter((row) => row.some(Boolean))
+  if (!rows.length) return
+  const width = Math.max(...rows.map((row) => row.length))
+  const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => row[index] ?? ''))
+  return { headers: normalized[0], rows: normalized.slice(1) }
+}
+
 function attachmentIcon(attachment: Attachment) {
   if (attachment.mimeType === 'application/pdf') return <FileText size={15} />
   if (attachment.mimeType.startsWith('image/')) return <FileImage size={15} />
@@ -36,6 +52,7 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
   const [note, setNote] = useState(node?.note ?? '')
   const [code, setCode] = useState(node?.code ?? '')
   const [formula, setFormula] = useState(node?.formula ?? '')
+  const [tableText, setTableText] = useState(tableToText(node?.table))
   const [tagDraft, setTagDraft] = useState('')
   const [preview, setPreview] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<Attachment>()
@@ -158,6 +175,12 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
         <section className="inspector-block compact-block">
           <label htmlFor="node-code"><Code2 size={12} />代码</label>
           <textarea id="node-code" className="inspector-input code-textarea" rows={4} value={code} onChange={(event) => setCode(event.target.value)} onBlur={() => patch({ code: code || undefined })} placeholder="粘贴代码片段…" />
+        </section>
+
+        <section className="inspector-block compact-block">
+          <label htmlFor="node-table"><Table2 size={12} />表格</label>
+          <textarea id="node-table" className="inspector-input table-textarea" rows={4} value={tableText} onChange={(event) => setTableText(event.target.value)} onBlur={() => patch({ table: parseTable(tableText) })} placeholder={'列一\t列二\n内容 A\t内容 B'} />
+          {node.table && <div className="node-table-preview"><table><thead><tr>{node.table.headers.map((header, index) => <th key={index}>{header}</th>)}</tr></thead><tbody>{node.table.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>}
         </section>
 
         <section className="inspector-block">

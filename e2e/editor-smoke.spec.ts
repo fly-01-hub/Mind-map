@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 test('creates a complete local backup from the library', async ({ page }) => {
   await page.addInitScript(() => { Reflect.deleteProperty(window, 'showSaveFilePicker') })
@@ -177,7 +178,7 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
   await page.goto('/map/research-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.getByRole('button', { name: '更多' }).click()
-  await page.getByText('导入 Markdown', { exact: true }).click()
+  await page.getByRole('menuitem', { name: '导入文件' }).click()
 
   const lines = ['# 500 节点性能验收']
   for (let branch = 0; branch < 20; branch += 1) {
@@ -186,7 +187,7 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
   }
   await page.getByPlaceholder(/根主题/).fill(lines.join('\n'))
   const startedAt = Date.now()
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await page.getByRole('button', { name: '导入 Markdown', exact: true }).click()
   await expect(page.locator('.me-tpc')).toHaveCount(501, { timeout: 15_000 })
   expect(Date.now() - startedAt).toBeLessThan(15_000)
 
@@ -261,4 +262,101 @@ test('selects a range of outline topics and applies one atomic bulk action', asy
   await page.getByRole('button', { name: '删除', exact: true }).click()
   await expect(page.locator('.outline-row')).toHaveCount(before - 2)
   await expect(page.getByRole('toolbar', { name: '批量操作' })).toHaveCount(0)
+})
+
+test('creates and persists a cross-topic relation in the mind-map view', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  const first = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  await first.click()
+  await expect(page.getByRole('button', { name: '创建关联线' })).toBeVisible()
+  await page.getByRole('button', { name: '创建关联线' }).click()
+  await page.getByRole('button', { name: '关联到 激光雷达' }).click()
+  await expect(page.locator('.topiclinks [data-linkid]')).toHaveCount(1)
+
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.topiclinks [data-linkid]')).toHaveCount(1)
+})
+
+test('creates a persistent summary from adjacent outline topics', async ({ page }) => {
+  await page.goto('/map/research-map')
+  const firstRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '相机模型' }) })
+  const secondRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '柱状投影' }) })
+  await firstRow.locator('.outline-bullet').click()
+  await secondRow.locator('.outline-bullet').click({ modifiers: ['Control'] })
+  await page.getByRole('button', { name: '概要', exact: true }).click()
+
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.summary [id^="s-"]')).toHaveCount(1)
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.summary [id^="s-"]')).toHaveCount(1)
+})
+
+test('persists map appearance and offers a distraction-free presentation mode', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('menuitemradio', { name: '海洋蓝' }).click()
+  await expect(page.locator('.me-root .me-tpc').first()).toHaveCSS('background-color', 'rgb(40, 86, 107)')
+
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('menuitem', { name: '演示模式' }).click()
+  await expect(page.getByRole('button', { name: '退出演示' })).toBeVisible()
+  await expect(page.locator('.editor-toolbar')).toBeHidden()
+  await page.getByRole('button', { name: '退出演示' }).click()
+  await expect(page.locator('.editor-toolbar')).toBeVisible()
+
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.me-root .me-tpc').first()).toHaveCSS('background-color', 'rgb(40, 86, 107)')
+})
+
+test('round-trips a local XMind file without an online converter', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '更多' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('menuitem', { name: '导出 XMind' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.xmind$/)
+  const filePath = await download.path()
+  expect(filePath).toBeTruthy()
+
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('menuitem', { name: '导入文件' }).click()
+  await page.locator('input[type="file"][accept*="xmind"]').setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: 'application/x-xmind',
+    buffer: await readFile(filePath!),
+  })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.outline-row')).toHaveCount(10)
+})
+
+test('round-trips OPML and edits a structured table locally', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '更多' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('menuitem', { name: '导出 OPML' }).click()
+  const download = await downloadPromise
+  const filePath = await download.path()
+  expect(filePath).toBeTruthy()
+
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('menuitem', { name: '导入文件' }).click()
+  await page.locator('input[type="file"][accept*="opml"]').setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: 'text/x-opml',
+    buffer: await readFile(filePath!),
+  })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.outline-row')).toHaveCount(10)
+
+  await page.locator('.outline-topic-input').first().click()
+  await page.getByRole('button', { name: '节点详情' }).click()
+  await page.getByLabel('表格').fill('方法\t结果\n方案 A\t92%')
+  await page.getByText('节点颜色').click()
+  await expect(page.locator('.node-table-preview')).toContainText('方案 A')
+  await expect(page.locator('.outline-node-meta')).toContainText('表格 1')
 })

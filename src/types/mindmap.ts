@@ -27,6 +27,11 @@ export interface NodeImage {
   height: number
 }
 
+export interface NodeTable {
+  headers: string[]
+  rows: string[][]
+}
+
 export interface NodeData {
   id: string
   title: string
@@ -45,13 +50,45 @@ export interface NodeData {
   formula?: string
   icon?: string
   image?: NodeImage
+  table?: NodeTable
   attachments: Attachment[]
+}
+
+export interface MapArrow {
+  id: string
+  label: string
+  from: string
+  to: string
+  delta1?: { x: number; y: number }
+  delta2?: { x: number; y: number }
+  bidirectional?: boolean
+  style?: {
+    stroke?: string
+    strokeWidth?: string | number
+    strokeDasharray?: string
+    opacity?: string | number
+    labelColor?: string
+  }
+}
+
+export interface MapSummary {
+  id: string
+  label: string
+  parent: string
+  start: number
+  end: number
+  nodeIds?: string[]
+  style?: { stroke?: string; labelColor?: string }
 }
 
 export interface MindMapDocument {
   id: string
   title: string
   root: NodeData
+  arrows?: MapArrow[]
+  summaries?: MapSummary[]
+  mapTheme?: 'paper' | 'ocean' | 'warm' | 'mono'
+  compactMap?: boolean
   folderId?: string
   isFavorite: boolean
   version: number
@@ -76,6 +113,8 @@ export interface DocumentVersion {
   version: number
   title: string
   root: NodeData
+  arrows?: MapArrow[]
+  summaries?: MapSummary[]
   createdAt: string
   reason: 'interval' | 'important' | 'before-restore' | 'conflict'
 }

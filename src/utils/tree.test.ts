@@ -139,4 +139,37 @@ describe('tree operations', () => {
     useDocumentStore.getState().redo()
     expect(useDocumentStore.getState().documents[0].root.children).toHaveLength(before + 1)
   })
+
+  it('stores graph relations in history and removes dangling links', () => {
+    useDocumentStore.setState({
+      documents: structuredClone(mockDocuments),
+      activeDocumentId: 'research-map',
+      histories: {},
+      clipboard: undefined,
+    })
+    const root = useDocumentStore.getState().documents[0].root
+    const first = root.children[0]
+    const second = root.children[1]
+    useDocumentStore.getState().addArrow(first.id, second.id)
+    expect(useDocumentStore.getState().documents[0].arrows).toHaveLength(1)
+    useDocumentStore.getState().undo()
+    expect(useDocumentStore.getState().documents[0].arrows).toHaveLength(0)
+    useDocumentStore.getState().redo()
+    expect(useDocumentStore.getState().documents[0].arrows).toHaveLength(1)
+    useDocumentStore.getState().remove(second.id)
+    expect(useDocumentStore.getState().documents[0].arrows).toHaveLength(0)
+  })
+
+  it('creates summaries only for adjacent siblings', () => {
+    useDocumentStore.setState({
+      documents: structuredClone(mockDocuments),
+      activeDocumentId: 'research-map',
+      histories: {},
+      clipboard: undefined,
+    })
+    const root = useDocumentStore.getState().documents[0].root
+    expect(useDocumentStore.getState().addSummary([root.children[0].id, root.children[1].id])).toBeTruthy()
+    expect(useDocumentStore.getState().documents[0].summaries?.[0].nodeIds).toEqual([root.children[0].id, root.children[1].id])
+    expect(useDocumentStore.getState().addSummary([root.children[0].children[0].id, root.children[1].id])).toBeUndefined()
+  })
 })
