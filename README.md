@@ -1,9 +1,11 @@
 # 枝间 · 个人知识思维导图
 
-枝间是一款完全 Local-first 的个人思维导图，提供 Web/PWA 与 Windows 桌面版，适合整理论文、科研项目、知识体系和创作设定。所有资料都写入当前浏览器或桌面应用自己的 IndexedDB，不需要注册、登录或配置云数据库。
+枝间是一款完全 Local-first 的个人大纲笔记与思维导图，核心体验采用“大纲快速输入、导图查看结构”的双视图模式。所有资料都写入当前浏览器或桌面应用自己的 IndexedDB，不需要固定网址、注册、登录或配置云数据库。
 
 ## 已实现的能力
 
+- 大纲与思维导图共用同一棵节点树，默认进入大纲编辑
+- 大纲支持 Enter 拆分/新建同级、Tab 缩进、Shift+Tab 提升、行首 Backspace 合并、方向键跨主题和拖动重排
 - 单侧右向脑图、键盘编辑、拖拽换父级、折叠、右键菜单、Focus Mode、撤销/重做
 - Node Inspector：Markdown/LaTeX/代码、待办、标签、链接、颜色、图标、PDF/图片/普通附件
 - IndexedDB 自动保存、刷新恢复和每份文档最近 50 个历史版本
@@ -38,13 +40,9 @@ npm run dev
 
 ## 3. 安装到 Windows
 
-### 使用 Edge 安装网页版
-
-部署到 HTTPS 后，在 Edge 地址栏选择“安装此站点作为应用”，或点击知识库右上角的“安装到电脑”。安装后会获得独立窗口、开始菜单和任务栏入口，并可离线打开已缓存的应用界面。
-
 ### 使用 `.exe` 安装包
 
-运行 `release/ResearchMind-Setup-1.0.3-x64.exe`，按向导选择安装目录。桌面版使用固定的 `app://researchmind` 本地来源，数据保存在 Windows 当前用户的 ResearchMind 应用数据目录中。
+运行 `release/ResearchMind-Setup-1.1.0-x64.exe`，按向导选择安装目录。桌面版使用固定的 `app://researchmind` 本地来源，数据保存在 Windows 当前用户的 ResearchMind 应用数据目录中。
 
 当前个人版本未购买商业代码签名证书。Windows 首次运行时可能显示 SmartScreen 提醒；请确认文件名和来源为本项目后，点击“更多信息”→“仍要运行”。不要从非本仓库或非本人电脑生成的链接下载安装包。
 
@@ -58,11 +56,11 @@ npm run desktop:build
 
 推送 `v*` 标签后，GitHub Actions 会自动构建安装包并添加到对应的 GitHub Release。
 
-## 4. 备份到百度网盘
+## 4. 创建本地备份
 
 1. 在知识库右上角点击“备份与恢复”。
 2. 点击“创建完整备份”。
-3. 如果已经安装百度网盘桌面客户端，可把 `.researchmind` 文件直接保存到其本地同步目录；否则先保存到电脑，再手动上传到百度网盘。
+3. 把 `.researchmind` 文件保存到安全的本地文件夹或移动硬盘；如果你自己使用同步盘，也可以选择它的本地同步目录。
 4. 建议在重要编辑后或每周创建一次新备份，并保留最近几份。
 
 恢复时点击“从备份恢复”并选择 `.researchmind` 文件。恢复会在校验成功后整体替换当前浏览器内的数据；任何步骤失败都会回滚，不会留下半套数据。
@@ -85,18 +83,9 @@ E2E 默认调用本机 Chrome。若未安装 Chrome，可安装 Playwright Chrom
 npx playwright install chromium
 ```
 
-## 6. 部署到 Vercel
+## 6. 本地运行原则
 
-当前固定访问地址：<https://temporary-snappy-aurora-yy1owqr.vercel.app>
-
-1. 把仓库推送到 Git 平台。
-2. 在 Vercel 新建项目并导入仓库，Framework Preset 选择 Vite。
-3. Build Command 使用 `npm run build`，Output Directory 使用 `dist`。
-4. 不需要配置环境变量。仓库中的 `vercel.json` 已包含 SPA 路由回退。
-
-部署后数据仍只保存在访问该站点的浏览器中，不会自动上传到 Vercel。
-
-> IndexedDB 按网址隔离。固定网址变更后，旧网址中的资料不会自动出现；请使用 `.researchmind` 备份完成迁移。固定网址确定后应持续使用同一域名。
+日常使用推荐 Windows `.exe` 桌面版，不依赖固定网址或第三方托管。开发时可运行 `npm run dev`，它只在本机 `127.0.0.1` 提供页面。应用运行期间不会要求登录，也不会自动把文档、附件或使用记录发送给第三方。
 
 ## 目录
 

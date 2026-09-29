@@ -6,9 +6,10 @@ const shortcutGroups = [
     title: '创建与编辑',
     items: [
       ['Enter', '新建同级主题'],
-      ['Tab', '新建子主题'],
+      ['Tab', '缩进为上一主题的下级'],
       ['Shift + Tab', '提升一级'],
-      ['Delete', '删除主题及下级'],
+      ['行首 Backspace', '与上一主题合并'],
+      ['Ctrl + Shift + Backspace', '删除主题及下级'],
     ],
   },
   {
@@ -41,15 +42,15 @@ export function ShortcutHelpDialog({ open, onOpenChange }: { open: boolean; onOp
             <div><p className="eyebrow">快速上手</p><Dialog.Title>操作指南与快捷键</Dialog.Title></div>
             <Dialog.Close asChild><button className="icon-button" aria-label="关闭"><X size={18} /></button></Dialog.Close>
           </header>
-          <Dialog.Description>选中主题后直接使用键盘，可以连续、快速地搭建知识结构。</Dialog.Description>
+          <Dialog.Description>推荐先在大纲中连续输入和整理层级，再切换到思维导图查看全局；两种视图共用同一份本地数据。</Dialog.Description>
           <div className="shortcut-guide">
             <section className="shortcut-feature">
               <MousePointer2 size={18} />
-              <div><strong>选择与拖动</strong><span>单击选择、双击编辑主题；拖动主题可调整父级。按住鼠标中键拖动画布；左键从空白处拖框可删除框选主题，向下只删完全框住的主题，向上会删碰到的主题，可用 Ctrl + Z 撤销。右键打开命令菜单。</span></div>
+              <div><strong>大纲优先</strong><span>在大纲中按 Enter 连续输入，Tab / Shift + Tab 调整层级；拖动主题左侧把手可排序或改变父级。选中文字后可直接替换或按 Backspace 删除。顶部可随时切换到导图。</span></div>
             </section>
             <section className="shortcut-feature">
               <FileText size={18} />
-              <div><strong>把论文放进导图</strong><span>从资源管理器把 PDF 拖到任意主题，松开后会自动创建论文子节点。</span></div>
+              <div><strong>导图浏览</strong><span>导图中双击主题编辑，按住鼠标中键平移画布。论文能力暂时保留但不再作为主要流程，先保证大纲与导图的结构编辑稳定一致。</span></div>
             </section>
           </div>
           <div className="shortcut-columns">

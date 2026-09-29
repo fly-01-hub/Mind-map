@@ -7,6 +7,7 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   page.on('pageerror', (error) => errors.push(error.message))
 
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.locator('.me-tpc', { hasText: 'BEV' }).first().click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await page.locator('input[accept="application/pdf,.pdf"]').setInputFiles({

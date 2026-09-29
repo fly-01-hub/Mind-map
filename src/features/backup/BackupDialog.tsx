@@ -19,7 +19,7 @@ export function BackupDialog() {
       await flushLocalPersistence()
       const backup = await createLocalBackup()
       await saveBackupFile(backup)
-      setMessage(`备份已保存，共包含 ${backup.itemCount} 条数据。建议选择百度网盘同步目录。`)
+      setMessage(`备份已保存，共包含 ${backup.itemCount} 条数据。建议另存到安全的本地文件夹或移动硬盘。`)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') setMessage('已取消保存。')
       else setMessage(error instanceof Error ? error.message : '备份失败，请稍后重试。')
@@ -60,7 +60,7 @@ export function BackupDialog() {
             <Dialog.Close asChild><button className="icon-button" aria-label="关闭"><X size={18} /></button></Dialog.Close>
           </header>
           <Dialog.Description>
-            备份文件包含导图、历史版本、附件、PDF、批注和阅读进度。保存时可直接选择百度网盘的本地同步目录。
+            备份文件包含导图、历史版本、附件、PDF、批注和阅读进度。你可以保存到任意本地文件夹、移动硬盘，或自行选择的同步目录。
           </Dialog.Description>
           <div className="backup-actions">
             <button className="backup-action-card" disabled={busy} onClick={() => void exportBackup()}>

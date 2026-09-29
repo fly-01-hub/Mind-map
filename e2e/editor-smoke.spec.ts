@@ -27,8 +27,9 @@ test('switches library layouts and exposes the canvas operation guide', async ({
   await page.getByText('自动驾驶感知研究', { exact: true }).click()
   await page.getByRole('button', { name: '操作指南' }).click()
   await expect(page.getByRole('heading', { name: '操作指南与快捷键' })).toBeVisible()
-  await expect(page.getByText('把论文放进导图')).toBeVisible()
+  await expect(page.getByText('大纲优先')).toBeVisible()
   await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.getByRole('button', { name: '放大' }).click()
   await expect(page.locator('.canvas-scale')).toHaveText('110%')
 })
@@ -49,6 +50,7 @@ test('library opens a right-facing editable map without console errors', async (
   expect(folderBox!.height).toBeLessThan(40)
   await page.getByText('自动驾驶感知研究', { exact: true }).click()
   await expect(page).toHaveURL(/\/map\/research-map/)
+  await page.getByRole('button', { name: '导图', exact: true }).click()
 
   const topics = page.locator('.me-tpc')
   await expect(topics).toHaveCount(11)
@@ -104,6 +106,7 @@ test('dragging reparents a complete subtree', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   const fish = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
   const deep = page.locator('.me-tpc', { hasText: '深度学习' }).first()
   await expect(fish).toBeVisible()
@@ -133,6 +136,7 @@ test('creates a document, edits children, and restores them after refresh', asyn
   await page.goto('/library')
   await page.getByRole('button', { name: '新建思维导图' }).click()
   await expect(page).toHaveURL(/\/map\/[0-9a-f-]+/)
+  await page.getByRole('button', { name: '导图', exact: true }).click()
 
   const topics = page.locator('.me-tpc')
   await expect(topics).toHaveCount(1)
@@ -156,6 +160,7 @@ test('creates a document, edits children, and restores them after refresh', asyn
 
 test('exports the complete map as a PNG download', async ({ page }) => {
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   await expect(page.locator('.me-tpc')).toHaveCount(11)
   await page.getByRole('button', { name: '更多' }).click()
   const downloadPromise = page.waitForEvent('download')
@@ -170,6 +175,7 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.getByRole('button', { name: '更多' }).click()
   await page.getByText('导入 Markdown', { exact: true }).click()
 
@@ -188,4 +194,32 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
   await page.keyboard.press('Tab')
   await expect(page.locator('.me-tpc')).toHaveCount(502, { timeout: 3_000 })
   expect(errors).toEqual([])
+})
+
+test('edits structure continuously in the outline-first view', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await expect(page.getByRole('button', { name: '大纲' })).toHaveClass(/active/)
+  await expect(page.locator('.outline-row')).toHaveCount(10)
+
+  const topic = page.locator('.outline-topic-input').first()
+  await topic.click()
+  await topic.press('End')
+  await topic.press('Enter')
+  const created = page.locator('.outline-topic-input:focus')
+  await expect(created).toHaveValue('')
+  await created.fill('新建的同级主题')
+  await created.press('Tab')
+  await expect(page.locator('.outline-row')).toHaveCount(11)
+
+  await created.evaluate((element) => {
+    const input = element as HTMLTextAreaElement
+    input.setSelectionRange(3, 6)
+  })
+  await created.press('Backspace')
+  await expect(created).toHaveValue('新建的题')
+  await created.press('Shift+Tab')
+
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.me-tpc')).toHaveCount(12)
+  await expect(page.locator('.me-tpc', { hasText: '新建的题' })).toBeVisible()
 })

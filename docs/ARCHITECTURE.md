@@ -9,10 +9,12 @@ React Features
   → Dexie / IndexedDB（350ms 防抖，自动保存）
   → .researchmind 完整备份（用户主动创建）
 
-Map Editor → MindMapEngineAdapter → Mind Elixir 6
+Outline Editor ─┐
+                ├→ NodeData（唯一数据源）
+Map View ───────┘→ MindMapEngineAdapter → Mind Elixir 6（待逐步替换）
 ```
 
-`NodeData` 是 Source of Truth。Mind Elixir `NodeObj` 只由适配器转换产生；引擎操作再转换回 NodeData。数据库访问集中在 repository/service。
+`NodeData` 是 Source of Truth。大纲直接执行领域树命令；Mind Elixir `NodeObj` 只由适配器转换产生，引擎操作再转换回 NodeData。两种视图不能保存各自独立的节点副本。数据库访问集中在 repository/service。
 
 ## 状态边界
 
@@ -55,4 +57,4 @@ Markdown 导出会按 `AnnotationNodeRelation` 回查批注和论文，为生成
 
 ## AI 边界
 
-`services/ai/AIProvider.ts` 定义生成脑图、总结、扩写、改写、论文分析、论文比较和子树整理。当前 Mock Provider 不联网。未来真实 Provider 必须通过服务端代理，API Key 不得进入浏览器包。
+`services/ai/AIProvider.ts` 当前只保留离线 Mock，不联网、不要求账号，也不读取本地资料以外的内容。真实网络 Provider 不属于本地核心版本；除非用户未来明确启用独立扩展，否则不会加入登录、API Key 或后台服务。

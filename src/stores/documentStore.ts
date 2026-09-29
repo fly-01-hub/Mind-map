@@ -3,7 +3,8 @@ import { mockDocuments } from '../data/mockDocuments'
 import type { ClipboardPayload, FolderData, MindMapDocument, NodeData } from '../types/mindmap'
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
-  expandPathToNode, findParent, mapNode, promoteNode, removeNodeKeepChildren, removeSubtree, removeSubtrees, replaceSubtree,
+  expandPathToNode, findParent, indentNode, mapNode, mergeNodeInto, moveSubtreeRelative, promoteNode,
+  removeNodeKeepChildren, removeSubtree, removeSubtrees, replaceSubtree, splitNode,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
 
@@ -31,9 +32,14 @@ export interface DocumentState {
   restoreVersion: (documentId: string, title: string, root: NodeData, version: number) => void
   commitTree: (root: NodeData) => void
   replaceFocusedTree: (subtree: NodeData, focusRootId?: string) => void
-  insertChild: (parentId: string) => string | undefined
-  insertSibling: (nodeId: string) => string | undefined
+  insertChild: (parentId: string, title?: string) => string | undefined
+  insertSibling: (nodeId: string, title?: string) => string | undefined
+  split: (nodeId: string, before: string, after: string) => string | undefined
+  indent: (nodeId: string) => void
   promote: (nodeId: string) => void
+  mergeInto: (nodeId: string, targetId: string) => void
+  moveRelative: (nodeId: string, targetId: string, position: 'before' | 'inside' | 'after') => void
+  toggleCollapsed: (nodeId: string) => void
   remove: (nodeId: string) => void
   removeMany: (nodeIds: string[]) => void
   removeOnly: (nodeId: string) => void
@@ -98,7 +104,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     return document
   },
   renameDocument: (id, title) => set((state) => ({
-    documents: state.documents.map((document) => document.id === id ? touchDocument(document, { title }) : document),
+    documents: state.documents.map((document) => document.id === id ? touchDocument(document, {
+      title,
+      root: { ...document.root, title, updatedAt: new Date().toISOString() },
+    }) : document),
   })),
   toggleFavorite: (id) => set((state) => ({
     documents: state.documents.map((document) => document.id === id ? touchDocument(document, { isFavorite: !document.isFavorite }) : document),
@@ -144,17 +153,30 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   commitTree: (root) => set((state) => updateActive(state, (document) => withRoot(document, root))),
   replaceFocusedTree: (subtree, focusRootId) => set((state) => updateActive(state, (document) =>
     withRoot(document, focusRootId ? replaceSubtree(document.root, subtree) : subtree))),
-  insertChild: (parentId) => {
-    const node = createNode()
+  insertChild: (parentId, title) => {
+    const node = createNode(title)
     set((state) => updateActive(state, (document) => withRoot(document, insertChild(document.root, parentId, node))))
     return node.id
   },
-  insertSibling: (nodeId) => {
-    const node = createNode()
+  insertSibling: (nodeId, title) => {
+    const node = createNode(title)
     set((state) => updateActive(state, (document) => withRoot(document, insertSibling(document.root, nodeId, node))))
     return node.id
   },
+  split: (nodeId, before, after) => {
+    const current = get().documents.find((document) => document.id === get().activeDocumentId)
+    if (!current) return
+    const result = splitNode(current.root, nodeId, before, after)
+    if (!result.newId) return
+    set((state) => updateActive(state, (document) => withRoot(document, result.root)))
+    return result.newId
+  },
+  indent: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, indentNode(document.root, nodeId)))),
   promote: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, promoteNode(document.root, nodeId)))),
+  mergeInto: (nodeId, targetId) => set((state) => updateActive(state, (document) => withRoot(document, mergeNodeInto(document.root, nodeId, targetId)))),
+  moveRelative: (nodeId, targetId, position) => set((state) => updateActive(state, (document) => withRoot(document, moveSubtreeRelative(document.root, nodeId, targetId, position)))),
+  toggleCollapsed: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document,
+    mapNode(document.root, nodeId, (node) => ({ ...node, collapsed: !node.collapsed, updatedAt: new Date().toISOString() }))))),
   remove: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtree(document.root, nodeId)))),
   removeMany: (nodeIds) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtrees(document.root, nodeIds)))),
   removeOnly: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeNodeKeepChildren(document.root, nodeId)))),

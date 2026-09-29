@@ -7,6 +7,7 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
   page.on('pageerror', (error) => errors.push(error.message))
 
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.locator('.me-tpc', { hasText: 'BEV' }).first().click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await expect(page.getByText('文献 · 0', { exact: true })).toBeVisible()
@@ -35,6 +36,7 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
 
 test('creates a visible paper node when a PDF is dropped onto a topic', async ({ page }) => {
   await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
   const target = page.locator('.me-tpc', { hasText: 'BEV' }).first()
   await expect(target).toBeVisible()
   const bytes = Array.from(createTestPdf())

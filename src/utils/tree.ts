@@ -111,6 +111,46 @@ export function promoteNode(root: NodeData, nodeId: string): NodeData {
   })
 }
 
+export function indentNode(root: NodeData, nodeId: string): NodeData {
+  const match = findParent(root, nodeId)
+  if (!match || match.index === 0) return root
+  const target = match.parent.children[match.index]
+  const previous = match.parent.children[match.index - 1]
+  const withoutTarget = mapNode(root, match.parent.id, (parent) => ({
+    ...parent,
+    children: parent.children.filter((child) => child.id !== nodeId),
+    updatedAt: now(),
+  }))
+  return normalizeOrders(mapNode(withoutTarget, previous.id, (node) => ({
+    ...node,
+    collapsed: false,
+    children: [...node.children, target],
+    updatedAt: now(),
+  })))
+}
+
+export function splitNode(root: NodeData, nodeId: string, before: string, after: string): { root: NodeData; newId?: string } {
+  if (!findNode(root, nodeId)) return { root }
+  const next = createNode(after)
+  const updated = mapNode(root, nodeId, (node) => ({ ...node, title: before, updatedAt: now() }))
+  return { root: insertSibling(updated, nodeId, next), newId: next.id }
+}
+
+export function mergeNodeInto(root: NodeData, nodeId: string, targetId: string): NodeData {
+  if (nodeId === root.id || nodeId === targetId) return root
+  const source = findNode(root, nodeId)
+  const target = findNode(root, targetId)
+  if (!source || !target || findNode(source, targetId)) return root
+  const removed = removeSubtree(root, nodeId)
+  return normalizeOrders(mapNode(removed, targetId, (node) => ({
+    ...node,
+    title: `${node.title}${source.title}`,
+    collapsed: false,
+    children: [...node.children, ...source.children],
+    updatedAt: now(),
+  })))
+}
+
 export function cloneSubtree(node: NodeData): NodeData {
   const timestamp = now()
   return {
@@ -138,6 +178,24 @@ export function moveSubtree(root: NodeData, nodeId: string, newParentId: string,
     const safeIndex = Math.max(0, Math.min(index ?? children.length, children.length))
     children.splice(safeIndex, 0, node)
     return { ...parent, collapsed: false, children, updatedAt: now() }
+  }))
+}
+
+export function moveSubtreeRelative(root: NodeData, nodeId: string, targetId: string, position: 'before' | 'inside' | 'after'): NodeData {
+  if (nodeId === targetId || nodeId === root.id) return root
+  if (position === 'inside') return moveSubtree(root, nodeId, targetId)
+  const source = findNode(root, nodeId)
+  const target = findNode(root, targetId)
+  const targetParent = findParent(root, targetId)
+  if (!source || !target || !targetParent || findNode(source, targetId)) return root
+  const removed = removeSubtree(root, nodeId)
+  const nextTarget = findParent(removed, targetId)
+  if (!nextTarget) return root
+  const insertionIndex = nextTarget.index + (position === 'after' ? 1 : 0)
+  return normalizeOrders(mapNode(removed, nextTarget.parent.id, (parent) => {
+    const children = [...parent.children]
+    children.splice(insertionIndex, 0, source)
+    return { ...parent, children, updatedAt: now() }
   }))
 }
 

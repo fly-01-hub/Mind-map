@@ -1,8 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, History,
+  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, History, ListTree,
   FileDown, FileUp, ImageDown, Maximize2, Minus, MoreHorizontal, PanelRight,
-  Plus, Redo2, Search, Undo2, X, ZoomIn, ZoomOut,
+  Network, Plus, Redo2, Search, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -23,6 +23,7 @@ import { downloadText } from '../../services/export/download'
 import { markdownToTree, treeToMarkdown, type MarkdownPaperSources } from '../../services/export/markdown'
 import { searchDocuments } from '../../utils/search'
 import { ShortcutHelpDialog } from './ShortcutHelpDialog'
+import { OutlineEditor } from '../outline/OutlineEditor'
 import 'mind-elixir/style.css'
 
 const NodeInspector = lazy(() => import('../nodeInspector/NodeInspector').then((module) => ({ default: module.NodeInspector })))
@@ -54,6 +55,8 @@ export function MapEditorPage() {
   const [fileDropTargetId, setFileDropTargetId] = useState<string>()
   const [canvasScale, setCanvasScale] = useState(1)
   const [isPanning, setIsPanning] = useState(false)
+  const [editorView, setEditorView] = useState<'outline' | 'mindmap'>(() =>
+    window.localStorage.getItem('zhijian-editor-view') === 'mindmap' ? 'mindmap' : 'outline')
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(window.localStorage.getItem('zhijian-inspector-width'))
     return Number.isFinite(saved) && saved >= 300 && saved <= 520 ? saved : 360
@@ -116,7 +119,7 @@ export function MapEditorPage() {
 
   useEffect(() => {
     const element = canvasRef.current
-    if (!element || !viewRoot) return
+    if (editorView !== 'mindmap' || !element || !viewRoot) return
     let active = true
     const adapter = new MindMapEngineAdapter(element, {
       onSelectionChange: setSelectedNode,
@@ -147,7 +150,7 @@ export function MapEditorPage() {
     }
     // The adapter owns one engine instance per document; data refreshes in the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, document?.id])
+  }, [id, document?.id, editorView])
 
   useEffect(() => {
     if (!engineReady || !viewRoot) return
@@ -190,9 +193,9 @@ export function MapEditorPage() {
 
   const editNewNode = useCallback((nodeId?: string) => {
     if (!nodeId) return
-    pendingEditRef.current = nodeId
+    if (editorView === 'mindmap') pendingEditRef.current = nodeId
     setSelectedNode(nodeId)
-  }, [setSelectedNode])
+  }, [editorView, setSelectedNode])
 
   const command = useCallback((name: NodeCommand) => {
     const store = useDocumentStore.getState()
@@ -209,12 +212,18 @@ export function MapEditorPage() {
       case 'copy': store.copy(selection); break
       case 'cut': store.cut(selection); break
       case 'paste': editNewNode(store.paste(selection)); break
-      case 'toggle': adapterRef.current?.toggleExpanded(selection); break
+      case 'toggle': if (editorView === 'outline') store.toggleCollapsed(selection); else adapterRef.current?.toggleExpanded(selection); break
       case 'toggleSiblings': store.toggleSiblingChildren(selection); break
       case 'focus': setFocusRoot(selection); break
       default: setInspectorOpen(true)
     }
-  }, [editNewNode, setFocusRoot, setInspectorOpen, setSelectedNode])
+  }, [editNewNode, editorView, setFocusRoot, setInspectorOpen, setSelectedNode])
+
+  const changeEditorView = (view: 'outline' | 'mindmap') => {
+    setEditorView(view)
+    window.localStorage.setItem('zhijian-editor-view', view)
+    setNodeAnchor(undefined)
+  }
 
   const startInspectorResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -356,6 +365,10 @@ export function MapEditorPage() {
         <input className="document-title-input" value={document.title} aria-label="文档名称" onChange={(event) => renameDocument(document.id, event.target.value)} />
         <div className={`save-status status-${saveStatus}`}>{activeSave.icon}<span>{activeSave.label}</span></div>
         <span className="document-node-count">{countNodes(document.root)} 个节点</span>
+        <div className="editor-view-switch" aria-label="切换编辑视图">
+          <button className={editorView === 'outline' ? 'active' : ''} onClick={() => changeEditorView('outline')} title="大纲笔记"><ListTree size={15} /><span>大纲</span></button>
+          <button className={editorView === 'mindmap' ? 'active' : ''} onClick={() => changeEditorView('mindmap')} title="思维导图"><Network size={15} /><span>导图</span></button>
+        </div>
         <div className="toolbar-spacer" />
         <button className="toolbar-action-button add-topic-button" onClick={() => {
           if (!selectedNodeId) setSelectedNode(document.root.id)
@@ -370,16 +383,27 @@ export function MapEditorPage() {
             <DropdownMenu.Label className="dropdown-label">导入与导出</DropdownMenu.Label>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setImportOpen(true)}><FileUp size={16} />导入 Markdown</DropdownMenu.Item>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => downloadText(treeToMarkdown(document.root, markdownPaperSources), `${document.title}.md`, 'text/markdown;charset=utf-8')}><FileDown size={16} />导出 Markdown</DropdownMenu.Item>
-            <DropdownMenu.Item className="dropdown-item" onSelect={() => void adapterRef.current?.exportPng(document.title).catch(() => window.alert('PNG 导出失败，请收起部分超大内容后重试。'))}><ImageDown size={16} />导出 2× PNG</DropdownMenu.Item>
+            <DropdownMenu.Item className="dropdown-item" disabled={editorView !== 'mindmap'} onSelect={() => void adapterRef.current?.exportPng(document.title).catch(() => window.alert('PNG 导出失败，请收起部分超大内容后重试。'))}><ImageDown size={16} />导出 2× PNG</DropdownMenu.Item>
             <DropdownMenu.Separator className="context-separator" />
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setHistoryOpen(true)}><History size={16} />历史版本</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
       </header>
       {breadcrumbs.length > 0 && <div className="focus-breadcrumb"><Focus size={14} />{breadcrumbs.map((node, index) => <span key={node.id}><button onClick={() => index === 0 ? setFocusRoot(undefined) : setFocusRoot(node.id)}>{node.title}</button>{index < breadcrumbs.length - 1 && <ChevronRight size={13} />}</span>)}</div>}
-      {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => { setSelectedNode(result.nodeId); setFocusRoot(result.nodeId); setSearchOpen(false); setSearchQuery('') }}><strong>{result.nodeTitle}</strong><span>{result.field === 'note' ? '笔记' : result.field === 'tag' ? '标签' : '标题'} · {result.excerpt}</span></button>)}{!searchResults.length && <p>没有找到相关节点</p>}</div>}</div>}
+      {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => {
+        useDocumentStore.getState().revealNode(result.nodeId)
+        setSelectedNode(result.nodeId)
+        if (editorView === 'mindmap') setFocusRoot(result.nodeId)
+        else setFocusRoot(undefined)
+        setSearchOpen(false)
+        setSearchQuery('')
+      }}><strong>{result.nodeTitle}</strong><span>{result.field === 'note' ? '笔记' : result.field === 'tag' ? '标签' : '标题'} · {result.excerpt}</span></button>)}{!searchResults.length && <p>没有找到相关节点</p>}</div>}</div>}
       <NodeContextMenu onCommand={command} isRoot={isRoot} hasClipboard={Boolean(useDocumentStore.getState().clipboard)}>
-        <main
+        {editorView === 'outline' ? <OutlineEditor
+          root={viewRoot}
+          documentTitle={document.title}
+          onRenameDocument={(title) => renameDocument(document.id, title)}
+        /> : <main
           className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''} ${isPanning ? 'is-panning' : ''}`}
           tabIndex={0}
           onPointerDownCapture={(event) => {
@@ -530,7 +554,7 @@ export function MapEditorPage() {
             <button onClick={() => useDocumentStore.getState().undo()} title="撤销（Ctrl + Z）" aria-label="撤销"><Undo2 size={16} /></button>
             <button onClick={() => useDocumentStore.getState().redo()} title="重做（Ctrl + Y）" aria-label="重做"><Redo2 size={16} /></button>
           </div>
-        </main>
+        </main>}
       </NodeContextMenu>
       {inspectorOpen && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} /></Suspense></>}
       <HistoryDialog document={document} open={historyOpen} onOpenChange={setHistoryOpen} />

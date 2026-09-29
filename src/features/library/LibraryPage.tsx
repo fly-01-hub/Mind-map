@@ -267,7 +267,7 @@ export function LibraryPage() {
           <div><FileText size={17} /><span><strong>{activeDocuments.length}</strong> 份导图</span></div>
           <div><GitBranch size={17} /><span><strong>{totalNodeCount}</strong> 个节点</span></div>
           <div><Folder size={17} /><span><strong>{activeFolderCount}</strong> 个文件夹</span></div>
-          <div className="library-overview-tip"><BookOpen size={17} /><span>打开导图后，可把 PDF 直接拖到主题上</span></div>
+          <div className="library-overview-tip"><BookOpen size={17} /><span>先用大纲连续输入，再切换导图查看全局结构</span></div>
           <div className="library-overview-safe"><ShieldCheck size={16} />自动保存到本地</div>
         </section>
         <div className="library-toolbar"><label className="search-field"><Search size={17} /><input ref={searchInputRef} aria-label="搜索文档" aria-keyshortcuts="Control+K" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、节点、标签或笔记…" /><kbd>Ctrl K</kbd></label><div className="view-switch" aria-label="切换文档布局"><button className={viewMode === 'list' ? 'active' : ''} aria-label="列表视图" onClick={() => changeViewMode('list')}><List size={17} /></button><button className={viewMode === 'grid' ? 'active' : ''} aria-label="卡片视图" onClick={() => changeViewMode('grid')}><LayoutGrid size={17} /></button></div></div>

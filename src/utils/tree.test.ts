@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createNode, duplicateSubtree, expandPathToNode, findNode, findParent, insertChild, insertSibling,
-  moveSubtree, promoteNode, removeNodeKeepChildren, removeSubtree,
+  createNode, duplicateSubtree, expandPathToNode, findNode, findParent, indentNode, insertChild, insertSibling,
+  mergeNodeInto, moveSubtree, moveSubtreeRelative, promoteNode, removeNodeKeepChildren, removeSubtree, splitNode,
 } from './tree'
 import { useDocumentStore } from '../stores/documentStore'
 import { mockDocuments } from '../data/mockDocuments'
@@ -50,11 +50,41 @@ describe('tree operations', () => {
     expect(result.children.map((node) => node.title)).toEqual(['A', 'B'])
   })
 
+  it('indents a topic below its previous sibling', () => {
+    const root = createNode('Root')
+    const first = createNode('First')
+    const second = createNode('Second')
+    const result = indentNode({ ...root, children: [first, second] }, second.id)
+    expect(result.children.map((node) => node.title)).toEqual(['First'])
+    expect(result.children[0].children.map((node) => node.title)).toEqual(['Second'])
+  })
+
+  it('splits and merges outline topics without losing child nodes', () => {
+    const root = createNode('Root')
+    const child = { ...createNode('AlphaBeta'), children: [createNode('Nested')] }
+    const split = splitNode({ ...root, children: [child] }, child.id, 'Alpha', 'Beta')
+    expect(split.root.children.map((node) => node.title)).toEqual(['Alpha', 'Beta'])
+    expect(split.root.children[0].children[0].title).toBe('Nested')
+    const merged = mergeNodeInto(split.root, split.newId!, child.id)
+    expect(merged.children.map((node) => node.title)).toEqual(['AlphaBeta'])
+    expect(merged.children[0].children[0].title).toBe('Nested')
+  })
+
   it('moves a subtree to another parent and rejects cycles', () => {
     const { root, ids } = sample()
     const moved = moveSubtree(root, ids.c, ids.root, 0)
     expect(findParent(moved, ids.c)?.parent.id).toBe(ids.root)
     expect(moveSubtree(root, ids.a, ids.c)).toEqual(root)
+  })
+
+  it('reorders topics relative to a drop target', () => {
+    const root = createNode('Root')
+    const a = createNode('A')
+    const b = createNode('B')
+    const c = createNode('C')
+    const source = { ...root, children: [a, b, c] }
+    expect(moveSubtreeRelative(source, a.id, c.id, 'after').children.map((node) => node.title)).toEqual(['B', 'C', 'A'])
+    expect(moveSubtreeRelative(source, c.id, a.id, 'before').children.map((node) => node.title)).toEqual(['C', 'A', 'B'])
   })
 
   it('duplicates a subtree with fresh ids', () => {
