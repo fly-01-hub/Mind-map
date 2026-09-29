@@ -1,4 +1,5 @@
 import type { NodeData } from '../types/mindmap'
+import { combineRichText } from './richText'
 
 const now = () => new Date().toISOString()
 const uid = () => crypto.randomUUID()
@@ -129,10 +130,10 @@ export function indentNode(root: NodeData, nodeId: string): NodeData {
   })))
 }
 
-export function splitNode(root: NodeData, nodeId: string, before: string, after: string): { root: NodeData; newId?: string } {
+export function splitNode(root: NodeData, nodeId: string, before: string, after: string, beforeRichText?: string, afterRichText?: string): { root: NodeData; newId?: string } {
   if (!findNode(root, nodeId)) return { root }
-  const next = createNode(after)
-  const updated = mapNode(root, nodeId, (node) => ({ ...node, title: before, updatedAt: now() }))
+  const next = { ...createNode(after), richText: afterRichText }
+  const updated = mapNode(root, nodeId, (node) => ({ ...node, title: before, richText: beforeRichText, updatedAt: now() }))
   return { root: insertSibling(updated, nodeId, next), newId: next.id }
 }
 
@@ -145,6 +146,7 @@ export function mergeNodeInto(root: NodeData, nodeId: string, targetId: string):
   return normalizeOrders(mapNode(removed, targetId, (node) => ({
     ...node,
     title: `${node.title}${source.title}`,
+    richText: combineRichText(node.richText, node.title, source.richText, source.title),
     collapsed: false,
     children: [...node.children, ...source.children],
     updatedAt: now(),
@@ -195,6 +197,43 @@ export function moveSubtreeRelative(root: NodeData, nodeId: string, targetId: st
   return normalizeOrders(mapNode(removed, nextTarget.parent.id, (parent) => {
     const children = [...parent.children]
     children.splice(insertionIndex, 0, source)
+    return { ...parent, children, updatedAt: now() }
+  }))
+}
+
+export function topLevelSelectedNodes(root: NodeData, nodeIds: Iterable<string>): NodeData[] {
+  const selected = new Set(nodeIds)
+  selected.delete(root.id)
+  const result: NodeData[] = []
+  const visit = (node: NodeData, ancestorSelected: boolean) => {
+    const isSelected = selected.has(node.id)
+    if (isSelected && !ancestorSelected) result.push(node)
+    for (const child of node.children) visit(child, ancestorSelected || isSelected)
+  }
+  visit(root, false)
+  return result
+}
+
+export function moveSubtreesRelative(root: NodeData, nodeIds: Iterable<string>, targetId: string, position: 'before' | 'inside' | 'after'): NodeData {
+  const sources = topLevelSelectedNodes(root, nodeIds)
+  if (!sources.length || sources.some((source) => findNode(source, targetId))) return root
+  const removed = removeSubtrees(root, sources.map((node) => node.id))
+  if (position === 'inside') {
+    if (!findNode(removed, targetId)) return root
+    return normalizeOrders(mapNode(removed, targetId, (parent) => ({
+      ...parent,
+      collapsed: false,
+      children: [...parent.children, ...sources],
+      updatedAt: now(),
+    })))
+  }
+  const targetParent = findParent(removed, targetId)
+  if (!targetParent) return root
+  return normalizeOrders(mapNode(removed, targetParent.parent.id, (parent) => {
+    const targetIndex = parent.children.findIndex((child) => child.id === targetId)
+    const insertionIndex = targetIndex + (position === 'after' ? 1 : 0)
+    const children = [...parent.children]
+    children.splice(insertionIndex, 0, ...sources)
     return { ...parent, children, updatedAt: now() }
   }))
 }

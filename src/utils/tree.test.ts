@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   createNode, duplicateSubtree, expandPathToNode, findNode, findParent, indentNode, insertChild, insertSibling,
-  mergeNodeInto, moveSubtree, moveSubtreeRelative, promoteNode, removeNodeKeepChildren, removeSubtree, splitNode,
+  mergeNodeInto, moveSubtree, moveSubtreeRelative, moveSubtreesRelative, promoteNode, removeNodeKeepChildren,
+  removeSubtree, splitNode, topLevelSelectedNodes,
 } from './tree'
 import { useDocumentStore } from '../stores/documentStore'
 import { mockDocuments } from '../data/mockDocuments'
@@ -94,6 +95,19 @@ describe('tree operations', () => {
     expect(copy?.title).toBe('B')
     expect(copy?.id).not.toBe(ids.b)
     expect(copy?.children[0].id).not.toBe(ids.c)
+  })
+
+  it('deduplicates nested multi-selections and moves them in document order', () => {
+    const root = createNode('Root')
+    const a = { ...createNode('A'), children: [createNode('A child')] }
+    const b = createNode('B')
+    const c = createNode('C')
+    const source = { ...root, children: [a, b, c] }
+    expect(topLevelSelectedNodes(source, [a.id, a.children[0].id, b.id]).map((node) => node.title)).toEqual(['A', 'B'])
+
+    const result = moveSubtreesRelative(source, [a.id, b.id], c.id, 'inside')
+    expect(result.children.map((node) => node.title)).toEqual(['C'])
+    expect(result.children[0].children.map((node) => node.title)).toEqual(['A', 'B'])
   })
 
   it('expands only the ancestor path needed to reveal a linked node', () => {

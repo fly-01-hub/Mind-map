@@ -206,20 +206,59 @@ test('edits structure continuously in the outline-first view', async ({ page }) 
   await topic.press('End')
   await topic.press('Enter')
   const created = page.locator('.outline-topic-input:focus')
-  await expect(created).toHaveValue('')
+  await expect(created).toHaveText('')
   await created.fill('新建的同级主题')
   await created.press('Tab')
   await expect(page.locator('.outline-row')).toHaveCount(11)
 
   await created.evaluate((element) => {
-    const input = element as HTMLTextAreaElement
-    input.setSelectionRange(3, 6)
+    const text = element.firstChild
+    if (!text) throw new Error('Expected an editable text node')
+    const range = document.createRange()
+    range.setStart(text, 3)
+    range.setEnd(text, 6)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   })
   await created.press('Backspace')
-  await expect(created).toHaveValue('新建的题')
+  await expect(created).toHaveText('新建的题')
+
+  await created.evaluate((element) => {
+    const text = element.firstChild
+    if (!text) throw new Error('Expected an editable text node')
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 2)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+  })
+  await page.getByRole('button', { name: '加粗', exact: true }).click()
+  await expect(created.locator('b, strong')).toHaveText('新建')
   await created.press('Shift+Tab')
 
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await expect(page.locator('.me-tpc')).toHaveCount(12)
   await expect(page.locator('.me-tpc', { hasText: '新建的题' })).toBeVisible()
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await expect(page.locator('.outline-topic-input', { hasText: '新建的题' }).locator('strong')).toHaveText('新建')
+})
+
+test('selects a range of outline topics and applies one atomic bulk action', async ({ page }) => {
+  await page.goto('/map/research-map')
+  const leafBullets = page.locator('.outline-bullet:not(.has-children)')
+  await leafBullets.nth(0).click()
+  await leafBullets.nth(2).click({ modifiers: ['Control'] })
+
+  await expect(page.locator('.outline-row.is-selected')).toHaveCount(2)
+  await expect(page.getByRole('toolbar', { name: '批量操作' })).toContainText('已选 2 项')
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await expect(page.locator('.outline-row.is-selected .outline-task.task-done')).toHaveCount(2)
+
+  const before = await page.locator('.outline-row').count()
+  await page.getByRole('button', { name: '删除', exact: true }).click()
+  await expect(page.locator('.outline-row')).toHaveCount(before - 2)
+  await expect(page.getByRole('toolbar', { name: '批量操作' })).toHaveCount(0)
 })

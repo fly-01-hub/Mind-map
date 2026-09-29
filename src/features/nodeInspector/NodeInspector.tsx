@@ -120,7 +120,7 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
       <div className="inspector-scroll">
         <section className="inspector-block">
           <label htmlFor="node-title">标题</label>
-          <textarea id="node-title" className="inspector-input title-textarea" rows={2} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (title.trim() && title !== node.title) patch({ title: title.trim() }) }} />
+          <textarea id="node-title" className="inspector-input title-textarea" rows={2} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (title.trim() && title !== node.title) patch({ title: title.trim(), richText: undefined }) }} />
           <div className="format-row">
             <button className={node.style.fontWeight === '700' ? 'active' : ''} aria-label="加粗" onClick={() => patch({ style: { ...node.style, fontWeight: node.style.fontWeight === '700' ? undefined : '700' } })}><Bold size={15} /></button>
             <button className={node.style.fontStyle === 'italic' ? 'active' : ''} aria-label="斜体" onClick={() => patch({ style: { ...node.style, fontStyle: node.style.fontStyle === 'italic' ? undefined : 'italic' } })}><Italic size={15} /></button>

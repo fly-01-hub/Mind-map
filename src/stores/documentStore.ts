@@ -4,7 +4,8 @@ import type { ClipboardPayload, FolderData, MindMapDocument, NodeData } from '..
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
   expandPathToNode, findParent, indentNode, mapNode, mergeNodeInto, moveSubtreeRelative, promoteNode,
-  removeNodeKeepChildren, removeSubtree, removeSubtrees, replaceSubtree, splitNode,
+  moveSubtreesRelative, removeNodeKeepChildren, removeSubtree, removeSubtrees, replaceSubtree,
+  splitNode, topLevelSelectedNodes,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
 
@@ -34,21 +35,25 @@ export interface DocumentState {
   replaceFocusedTree: (subtree: NodeData, focusRootId?: string) => void
   insertChild: (parentId: string, title?: string) => string | undefined
   insertSibling: (nodeId: string, title?: string) => string | undefined
-  split: (nodeId: string, before: string, after: string) => string | undefined
+  split: (nodeId: string, before: string, after: string, beforeRichText?: string, afterRichText?: string) => string | undefined
   indent: (nodeId: string) => void
   promote: (nodeId: string) => void
   mergeInto: (nodeId: string, targetId: string) => void
   moveRelative: (nodeId: string, targetId: string, position: 'before' | 'inside' | 'after') => void
+  moveManyRelative: (nodeIds: string[], targetId: string, position: 'before' | 'inside' | 'after') => void
   toggleCollapsed: (nodeId: string) => void
   remove: (nodeId: string) => void
   removeMany: (nodeIds: string[]) => void
   removeOnly: (nodeId: string) => void
   duplicate: (nodeId: string) => string | undefined
   updateNode: (nodeId: string, patch: Partial<NodeData>) => void
+  updateMany: (nodeIds: string[], patch: Partial<NodeData> | ((node: NodeData) => Partial<NodeData>)) => void
   revealNode: (nodeId: string) => void
   toggleSiblingChildren: (nodeId: string) => void
   copy: (nodeId: string) => void
   cut: (nodeId: string) => void
+  copyMany: (nodeIds: string[]) => void
+  cutMany: (nodeIds: string[]) => void
   paste: (parentId: string) => string | undefined
   undo: () => void
   redo: () => void
@@ -163,10 +168,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set((state) => updateActive(state, (document) => withRoot(document, insertSibling(document.root, nodeId, node))))
     return node.id
   },
-  split: (nodeId, before, after) => {
+  split: (nodeId, before, after, beforeRichText, afterRichText) => {
     const current = get().documents.find((document) => document.id === get().activeDocumentId)
     if (!current) return
-    const result = splitNode(current.root, nodeId, before, after)
+    const result = splitNode(current.root, nodeId, before, after, beforeRichText, afterRichText)
     if (!result.newId) return
     set((state) => updateActive(state, (document) => withRoot(document, result.root)))
     return result.newId
@@ -175,6 +180,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   promote: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, promoteNode(document.root, nodeId)))),
   mergeInto: (nodeId, targetId) => set((state) => updateActive(state, (document) => withRoot(document, mergeNodeInto(document.root, nodeId, targetId)))),
   moveRelative: (nodeId, targetId, position) => set((state) => updateActive(state, (document) => withRoot(document, moveSubtreeRelative(document.root, nodeId, targetId, position)))),
+  moveManyRelative: (nodeIds, targetId, position) => set((state) => updateActive(state, (document) => withRoot(document, moveSubtreesRelative(document.root, nodeIds, targetId, position)))),
   toggleCollapsed: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document,
     mapNode(document.root, nodeId, (node) => ({ ...node, collapsed: !node.collapsed, updatedAt: new Date().toISOString() }))))),
   remove: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtree(document.root, nodeId)))),
@@ -189,6 +195,19 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
   updateNode: (nodeId, patch) => set((state) => updateActive(state, (document) => withRoot(document,
     mapNode(document.root, nodeId, (node) => ({ ...node, ...patch, updatedAt: new Date().toISOString() }))))),
+  updateMany: (nodeIds, patch) => set((state) => updateActive(state, (document) => {
+    const ids = new Set(nodeIds)
+    const update = (node: NodeData): NodeData => {
+      const nextPatch = ids.has(node.id) ? (typeof patch === 'function' ? patch(node) : patch) : undefined
+      return {
+        ...node,
+        ...nextPatch,
+        updatedAt: nextPatch ? new Date().toISOString() : node.updatedAt,
+        children: node.children.map(update),
+      }
+    }
+    return withRoot(document, update(document.root))
+  })),
   revealNode: (nodeId) => set((state) => updateActive(state, (document) => {
     const root = expandPathToNode(document.root, nodeId)
     return root === document.root ? document : withRoot(document, root)
@@ -208,23 +227,38 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   copy: (nodeId) => {
     const document = get().documents.find((item) => item.id === get().activeDocumentId)
     const node = document && findNode(document.root, nodeId)
-    if (node) set({ clipboard: { mode: 'copy', node: clone(node), sourceId: nodeId } })
+    if (node) set({ clipboard: { mode: 'copy', nodes: [clone(node)], sourceIds: [nodeId] } })
   },
   cut: (nodeId) => {
     const document = get().documents.find((item) => item.id === get().activeDocumentId)
     const node = document && findNode(document.root, nodeId)
-    if (node && node.id !== document?.root.id) set({ clipboard: { mode: 'cut', node: clone(node), sourceId: nodeId } })
+    if (node && node.id !== document?.root.id) set({ clipboard: { mode: 'cut', nodes: [clone(node)], sourceIds: [nodeId] } })
+  },
+  copyMany: (nodeIds) => {
+    const document = get().documents.find((item) => item.id === get().activeDocumentId)
+    if (!document) return
+    const nodes = topLevelSelectedNodes(document.root, nodeIds)
+    if (nodes.length) set({ clipboard: { mode: 'copy', nodes: nodes.map(clone), sourceIds: nodes.map((node) => node.id) } })
+  },
+  cutMany: (nodeIds) => {
+    const document = get().documents.find((item) => item.id === get().activeDocumentId)
+    if (!document) return
+    const nodes = topLevelSelectedNodes(document.root, nodeIds)
+    if (nodes.length) set({ clipboard: { mode: 'cut', nodes: nodes.map(clone), sourceIds: nodes.map((node) => node.id) } })
   },
   paste: (parentId) => {
     const clipboard = get().clipboard
     if (!clipboard) return
-    const pasted = cloneSubtree(clipboard.node)
+    const current = get().documents.find((item) => item.id === get().activeDocumentId)
+    if (!current || (clipboard.mode === 'cut' && clipboard.nodes.some((node) => findNode(node, parentId)))) return
+    const pasted = clipboard.nodes.map(cloneSubtree)
     set((state) => updateActive(state, (document) => {
-      const base = clipboard.mode === 'cut' ? removeSubtree(document.root, clipboard.sourceId) : document.root
-      return withRoot(document, insertChild(base, parentId, pasted))
+      let root = clipboard.mode === 'cut' ? removeSubtrees(document.root, clipboard.sourceIds) : document.root
+      for (const node of pasted) root = insertChild(root, parentId, node)
+      return withRoot(document, root)
     }))
     if (clipboard.mode === 'cut') set({ clipboard: undefined })
-    return pasted.id
+    return pasted.at(-1)?.id
   },
   undo: () => set((state) => {
     const id = state.activeDocumentId

@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, History, ListTree,
+  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, Hash, History, ListTree,
   FileDown, FileUp, ImageDown, Maximize2, Minus, MoreHorizontal, PanelRight,
   Network, Plus, Redo2, Search, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
@@ -57,6 +57,7 @@ export function MapEditorPage() {
   const [isPanning, setIsPanning] = useState(false)
   const [editorView, setEditorView] = useState<'outline' | 'mindmap'>(() =>
     window.localStorage.getItem('zhijian-editor-view') === 'mindmap' ? 'mindmap' : 'outline')
+  const [outlineNumbering, setOutlineNumbering] = useState(() => window.localStorage.getItem('zhijian-outline-numbering') === 'true')
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(window.localStorage.getItem('zhijian-inspector-width'))
     return Number.isFinite(saved) && saved >= 300 && saved <= 520 ? saved : 360
@@ -385,6 +386,12 @@ export function MapEditorPage() {
             <DropdownMenu.Item className="dropdown-item" onSelect={() => downloadText(treeToMarkdown(document.root, markdownPaperSources), `${document.title}.md`, 'text/markdown;charset=utf-8')}><FileDown size={16} />导出 Markdown</DropdownMenu.Item>
             <DropdownMenu.Item className="dropdown-item" disabled={editorView !== 'mindmap'} onSelect={() => void adapterRef.current?.exportPng(document.title).catch(() => window.alert('PNG 导出失败，请收起部分超大内容后重试。'))}><ImageDown size={16} />导出 2× PNG</DropdownMenu.Item>
             <DropdownMenu.Separator className="context-separator" />
+            <DropdownMenu.Label className="dropdown-label">大纲显示</DropdownMenu.Label>
+            <DropdownMenu.CheckboxItem className="dropdown-item" checked={outlineNumbering} onCheckedChange={(checked) => {
+              setOutlineNumbering(checked)
+              window.localStorage.setItem('zhijian-outline-numbering', String(checked))
+            }}><Hash size={16} />主题编号</DropdownMenu.CheckboxItem>
+            <DropdownMenu.Separator className="context-separator" />
             <DropdownMenu.Item className="dropdown-item" onSelect={() => setHistoryOpen(true)}><History size={16} />历史版本</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
@@ -403,6 +410,11 @@ export function MapEditorPage() {
           root={viewRoot}
           documentTitle={document.title}
           onRenameDocument={(title) => renameDocument(document.id, title)}
+          onOpenDetails={(nodeId) => {
+            setSelectedNode(nodeId)
+            setInspectorOpen(true)
+          }}
+          showNumbering={outlineNumbering}
         /> : <main
           className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''} ${isPanning ? 'is-panning' : ''}`}
           tabIndex={0}

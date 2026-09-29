@@ -6,6 +6,7 @@ import MindElixir, {
 } from 'mind-elixir'
 import type { NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
 import { downloadBlob } from '../../services/export/download'
+import { plainTextFromRichText } from '../../utils/richText'
 
 interface EngineMetadata {
   createdAt: string
@@ -18,6 +19,7 @@ interface EngineMetadata {
   code?: string
   formula?: string
   icon?: string
+  richText?: string
 }
 
 interface AdapterEvents {
@@ -245,6 +247,8 @@ export class MindMapEngineAdapter {
         node.taskStatus === 'todo' ? '☐' : node.taskStatus === 'doing' ? '◒' : node.taskStatus === 'done' ? '☑' : undefined,
         node.icon,
         node.note ? '▤' : undefined,
+        node.code ? '⌘' : undefined,
+        node.formula ? '∑' : undefined,
         node.attachments.length ? '📎' : undefined,
       ].filter((value): value is string => Boolean(value)),
       hyperLink: node.hyperlink,
@@ -254,6 +258,7 @@ export class MindMapEngineAdapter {
         createdAt: node.createdAt, updatedAt: node.updatedAt, order: node.order,
         taskStatus: node.taskStatus, note: node.note,
         attachments: node.attachments, style: node.style, code: node.code, formula: node.formula, icon: node.icon,
+        richText: node.richText,
       },
     }
   }
@@ -261,7 +266,9 @@ export class MindMapEngineAdapter {
   private fromEngineNode(node: NodeObj<EngineMetadata>, order = 0): NodeData {
     const metadata = node.metadata ?? defaultMetadata()
     return {
-      id: node.id, title: node.topic, collapsed: node.expanded === false, order,
+      id: node.id, title: node.topic,
+      richText: metadata.richText && plainTextFromRichText(metadata.richText) === node.topic ? metadata.richText : undefined,
+      collapsed: node.expanded === false, order,
       createdAt: metadata.createdAt, updatedAt: new Date().toISOString(),
       style: metadata.style, tags: (node.tags ?? []).map((tag) => typeof tag === 'string' ? tag : tag.text),
       taskStatus: metadata.taskStatus, hyperlink: node.hyperLink, note: metadata.note,

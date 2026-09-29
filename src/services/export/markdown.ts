@@ -1,5 +1,6 @@
 import type { NodeData } from '../../types/mindmap'
 import { createNode, normalizeOrders } from '../../utils/tree'
+import { sanitizeRichText } from '../../utils/richText'
 
 interface NodeMetadata {
   tags: string[]
@@ -9,6 +10,7 @@ interface NodeMetadata {
   code?: string
   formula?: string
   style: NodeData['style']
+  richText?: string
 }
 
 export interface MarkdownPaperSource {
@@ -30,7 +32,7 @@ function label(node: NodeData) {
 function metadataLine(node: NodeData) {
   const metadata: NodeMetadata = {
     tags: node.tags, note: node.note, hyperlink: node.hyperlink,
-    taskStatus: node.taskStatus, code: node.code, formula: node.formula, style: node.style,
+    taskStatus: node.taskStatus, code: node.code, formula: node.formula, style: node.style, richText: node.richText,
   }
   return `<!-- zhijian-node:${encodeURIComponent(JSON.stringify(metadata))} -->`
 }
@@ -84,6 +86,7 @@ function applyMetadata(node: NodeData, encoded: string) {
       code: metadata.code,
       formula: metadata.formula,
       style: metadata.style ?? node.style,
+      richText: metadata.richText ? sanitizeRichText(metadata.richText) : undefined,
     })
   } catch {
     // Invalid optional metadata never prevents importing the visible outline.

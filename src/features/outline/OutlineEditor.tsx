@@ -1,71 +1,163 @@
-import { Check, ChevronDown, ChevronRight, Circle, GripVertical, Plus, StickyNote } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  Bold, Check, ChevronDown, ChevronRight, Circle, ClipboardPaste, Code, Copy, ExternalLink,
+  EyeOff, FileCode2, GripVertical, Highlighter, Italic, Link2, ListChecks, Paperclip,
+  Plus, Scissors, Sigma, StickyNote, Strikethrough, Trash2, Underline, UnfoldVertical,
+} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import type { NodeData } from '../../types/mindmap'
+import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
 
-interface VisibleNode {
-  node: NodeData
-  depth: number
-}
-
+interface VisibleNode { node: NodeData; depth: number; number: string }
 type DropPosition = 'before' | 'inside' | 'after'
+interface FormatSelection { nodeId: string; range: Range; left: number; top: number }
 
-function flattenVisible(nodes: NodeData[], depth = 0, result: VisibleNode[] = []): VisibleNode[] {
-  for (const node of nodes) {
-    result.push({ node, depth })
-    if (!node.collapsed) flattenVisible(node.children, depth + 1, result)
-  }
+function flattenVisible(nodes: NodeData[], depth = 0, result: VisibleNode[] = [], prefix = ''): VisibleNode[] {
+  nodes.forEach((node, index) => {
+    const number = prefix ? `${prefix}.${index + 1}` : String(index + 1)
+    result.push({ node, depth, number })
+    if (!node.collapsed) flattenVisible(node.children, depth + 1, result, number)
+  })
   return result
 }
 
+function selectedOffsets(editor: HTMLElement): { start: number; end: number; range?: Range } {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return { start: 0, end: 0 }
+  const range = selection.getRangeAt(0)
+  if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return { start: 0, end: 0 }
+  const before = document.createRange()
+  before.selectNodeContents(editor)
+  before.setEnd(range.startContainer, range.startOffset)
+  const through = document.createRange()
+  through.selectNodeContents(editor)
+  through.setEnd(range.endContainer, range.endOffset)
+  return { start: before.toString().length, end: through.toString().length, range }
+}
+
+function setEditorSelection(editor: HTMLElement, start: number, end = start) {
+  const selection = window.getSelection()
+  if (!selection) return
+  const textNodes: Text[] = []
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+  let current = walker.nextNode()
+  while (current) {
+    textNodes.push(current as Text)
+    current = walker.nextNode()
+  }
+  const locate = (offset: number): { node: Node; offset: number } => {
+    let remaining = Math.max(0, offset)
+    for (const textNode of textNodes) {
+      if (remaining <= textNode.data.length) return { node: textNode, offset: remaining }
+      remaining -= textNode.data.length
+    }
+    return { node: editor, offset: editor.childNodes.length }
+  }
+  const from = locate(start)
+  const to = locate(end)
+  const range = document.createRange()
+  range.setStart(from.node, from.offset)
+  range.setEnd(to.node, to.offset)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+function fragmentHtml(fragment: DocumentFragment): string {
+  const container = document.createElement('div')
+  container.append(fragment)
+  return sanitizeRichText(container.innerHTML)
+}
+
+function splitEditorAtSelection(editor: HTMLElement, range: Range) {
+  const beforeRange = document.createRange()
+  beforeRange.selectNodeContents(editor)
+  beforeRange.setEnd(range.startContainer, range.startOffset)
+  const afterRange = document.createRange()
+  afterRange.selectNodeContents(editor)
+  afterRange.setStart(range.endContainer, range.endOffset)
+  const beforeHtml = fragmentHtml(beforeRange.cloneContents())
+  const afterHtml = fragmentHtml(afterRange.cloneContents())
+  const before = plainTextFromRichText(beforeHtml)
+  const after = plainTextFromRichText(afterHtml)
+  return {
+    before, after,
+    beforeRichText: compactRichText(beforeHtml, before),
+    afterRichText: compactRichText(afterHtml, after),
+  }
+}
+
 function OutlineRow({
-  node, depth, previousId, nextId, registerInput, focusNode, dragState, setDragState,
+  node, depth, number, showNumbering, previousId, nextId, selected, registerInput, focusNode, dragState, setDragState,
+  onFormatSelection, onSelect,
+  onOpenDetails,
 }: {
   node: NodeData
   depth: number
+  number: string
+  showNumbering: boolean
   previousId?: string
   nextId?: string
-  registerInput: (id: string, element: HTMLTextAreaElement | null) => void
+  selected: boolean
+  registerInput: (id: string, element: HTMLElement | null) => void
   focusNode: (id: string, caret?: number | 'end' | 'all') => void
   dragState?: { id: string; position: DropPosition }
   setDragState: (state?: { id: string; position: DropPosition }) => void
+  onFormatSelection: (selection?: FormatSelection) => void
+  onSelect: (id: string, mode: 'single' | 'toggle' | 'range') => void
+  onOpenDetails: (id: string) => void
 }) {
-  const [draft, setDraft] = useState(node.title)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
   const setSelectedNode = useSelectionStore((state) => state.setSelectedNode)
-  const selected = useSelectionStore((state) => state.selectedNodeId === node.id)
 
   useEffect(() => {
-    if (globalThis.document.activeElement !== textareaRef.current) setDraft(node.title)
-  }, [node.title])
+    const editor = editorRef.current
+    if (!editor || document.activeElement === editor) return
+    const html = node.richText ? sanitizeRichText(node.richText) : richTextFromPlain(node.title)
+    if (sanitizeRichText(editor.innerHTML) !== html) editor.innerHTML = html
+  }, [node.richText, node.title])
 
-  useLayoutEffect(() => {
-    const input = textareaRef.current
-    if (!input) return
-    input.style.height = '0px'
-    input.style.height = `${Math.max(30, input.scrollHeight)}px`
-  }, [draft])
-
-  const commit = () => {
-    if (draft !== node.title) useDocumentStore.getState().updateNode(node.id, { title: draft })
+  const readEditor = () => {
+    const html = sanitizeRichText(editorRef.current?.innerHTML ?? '')
+    const title = plainTextFromRichText(html)
+    return { title, html, richText: compactRichText(html, title) }
   }
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const commit = () => {
+    const value = readEditor()
+    if (value.title !== node.title || value.richText !== node.richText) {
+      useDocumentStore.getState().updateNode(node.id, { title: value.title, richText: value.richText })
+    }
+  }
+
+  const reportSelection = () => {
+    const editor = editorRef.current
+    if (!editor) return onFormatSelection(undefined)
+    const selection = window.getSelection()
+    if (!selection?.rangeCount || selection.isCollapsed) return onFormatSelection(undefined)
+    const range = selection.getRangeAt(0)
+    if (!editor.contains(range.commonAncestorContainer)) return onFormatSelection(undefined)
+    const rect = range.getBoundingClientRect()
+    onFormatSelection({ nodeId: node.id, range: range.cloneRange(), left: rect.left + rect.width / 2, top: rect.top })
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing) return
-    const input = event.currentTarget
-    const start = input.selectionStart
-    const end = input.selectionEnd
+    const editor = event.currentTarget
+    const { start, end, range } = selectedOffsets(editor)
+    const value = readEditor()
     const store = useDocumentStore.getState()
     const mod = event.ctrlKey || event.metaKey
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && range) {
       event.preventDefault()
-      const newId = store.split(node.id, draft.slice(0, start), draft.slice(end))
+      const split = splitEditorAtSelection(editor, range)
+      const newId = store.split(node.id, split.before, split.after, split.beforeRichText, split.afterRichText)
       if (newId) {
         setSelectedNode(newId)
         focusNode(newId, 0)
       }
+      onFormatSelection(undefined)
       return
     }
     if (event.key === 'Tab') {
@@ -87,10 +179,9 @@ function OutlineRow({
     }
     if (event.key === 'Backspace' && start === 0 && end === 0 && previousId) {
       event.preventDefault()
-      const previous = useDocumentStore.getState().documents
-        .find((document) => document.id === useDocumentStore.getState().activeDocumentId)
+      const previous = store.documents.find((document) => document.id === store.activeDocumentId)
       const previousTitle = previous ? findTitle(previous.root, previousId) : ''
-      store.updateNode(node.id, { title: draft })
+      store.updateNode(node.id, value)
       store.mergeInto(node.id, previousId)
       setSelectedNode(previousId)
       focusNode(previousId, previousTitle.length)
@@ -103,7 +194,7 @@ function OutlineRow({
       focusNode(previousId, 'end')
       return
     }
-    if (event.key === 'ArrowDown' && start === draft.length && end === draft.length && nextId) {
+    if (event.key === 'ArrowDown' && start === value.title.length && end === value.title.length && nextId) {
       event.preventDefault()
       commit()
       setSelectedNode(nextId)
@@ -118,6 +209,11 @@ function OutlineRow({
         setSelectedNode(newId)
         focusNode(newId, 'all')
       }
+      return
+    }
+    if (mod && event.shiftKey && event.key.toLowerCase() === 'l') {
+      event.preventDefault()
+      store.updateNode(node.id, { taskStatus: node.taskStatus === 'none' ? 'todo' : node.taskStatus === 'done' ? 'none' : 'done' })
       return
     }
     if (event.altKey && event.key === '.') {
@@ -143,8 +239,10 @@ function OutlineRow({
       }}
       onDrop={(event) => {
         event.preventDefault()
-        const sourceId = event.dataTransfer.getData('application/x-zhijian-outline-node')
-        if (sourceId && dropPosition) useDocumentStore.getState().moveRelative(sourceId, node.id, dropPosition)
+        const value = event.dataTransfer.getData('application/x-zhijian-outline-nodes')
+        let sourceIds: string[] = []
+        try { sourceIds = JSON.parse(value) as string[] } catch { sourceIds = [] }
+        if (sourceIds.length && dropPosition) useDocumentStore.getState().moveManyRelative(sourceIds, node.id, dropPosition)
         setDragState(undefined)
       }}
     >
@@ -154,46 +252,73 @@ function OutlineRow({
         aria-label={`拖动主题 ${node.title}`}
         title="拖动调整顺序或层级"
         onDragStart={(event) => {
-          event.dataTransfer.setData('application/x-zhijian-outline-node', node.id)
+          const currentSelection = useSelectionStore.getState().selectedNodeIds
+          const sourceIds = selected && currentSelection.length > 1 ? currentSelection : [node.id]
+          event.dataTransfer.setData('application/x-zhijian-outline-nodes', JSON.stringify(sourceIds))
           event.dataTransfer.effectAllowed = 'move'
-          setSelectedNode(node.id)
+          if (sourceIds.length === 1) setSelectedNode(node.id)
         }}
         onDragEnd={() => setDragState(undefined)}
       ><GripVertical size={15} /></button>
       <button
         className={`outline-bullet ${node.children.length ? 'has-children' : ''}`}
         aria-label={node.children.length ? (node.collapsed ? '展开下级主题' : '折叠下级主题') : '选中主题'}
-        onClick={() => {
-          setSelectedNode(node.id)
-          if (node.children.length) useDocumentStore.getState().toggleCollapsed(node.id)
-          else focusNode(node.id)
+        onClick={(event) => {
+          const mode = event.shiftKey ? 'range' : (event.ctrlKey || event.metaKey) ? 'toggle' : 'single'
+          onSelect(node.id, mode)
+          if (node.children.length && mode === 'single') useDocumentStore.getState().toggleCollapsed(node.id)
+          else if (mode === 'single') focusNode(node.id)
         }}
       >
         {node.children.length
           ? (node.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />)
           : <Circle size={8} fill="currentColor" />}
       </button>
+      {showNumbering && <span className="outline-number" aria-hidden="true">{number}</span>}
       {node.taskStatus !== 'none' && <button
         className={`outline-task task-${node.taskStatus}`}
         aria-label={node.taskStatus === 'done' ? '标记为未完成' : '标记为已完成'}
         onClick={() => useDocumentStore.getState().updateNode(node.id, { taskStatus: node.taskStatus === 'done' ? 'todo' : 'done' })}
       >{node.taskStatus === 'done' ? <Check size={13} /> : <span />}</button>}
-      <textarea
+      <div
         ref={(element) => {
-          textareaRef.current = element
+          editorRef.current = element
           registerInput(node.id, element)
         }}
         className="outline-topic-input"
-        rows={1}
-        value={draft}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
         aria-label="主题内容"
+        aria-multiline="true"
+        data-placeholder="输入主题"
         spellCheck={false}
+        dangerouslySetInnerHTML={{ __html: node.richText ? sanitizeRichText(node.richText) : richTextFromPlain(node.title) }}
         onFocus={() => setSelectedNode(node.id)}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
+        onBlur={() => {
+          commit()
+          window.setTimeout(() => {
+            if (!document.activeElement?.closest('.outline-format-toolbar')) onFormatSelection(undefined)
+          }, 0)
+        }}
+        onInput={reportSelection}
+        onPointerUp={reportSelection}
+        onKeyUp={reportSelection}
         onKeyDown={handleKeyDown}
+        onPaste={(event) => {
+          event.preventDefault()
+          document.execCommand('insertText', false, event.clipboardData.getData('text/plain'))
+        }}
       />
-      {node.note && <button className="outline-note-indicator" title={node.note} aria-label="此主题有描述"><StickyNote size={13} /></button>}
+      {(node.tags.length > 0 || node.hyperlink || node.note || node.code || node.formula || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
+        {node.tags.map((tag) => <span className="outline-meta-tag" key={tag}>#{tag}</span>)}
+        {node.hyperlink && <a href={node.hyperlink} target="_blank" rel="noreferrer" title={node.hyperlink}><ExternalLink size={12} />链接</a>}
+        {node.note && <button title={node.note} onClick={() => onOpenDetails(node.id)}><StickyNote size={12} />描述</button>}
+        {node.code && <button title={node.code} onClick={() => onOpenDetails(node.id)}><FileCode2 size={12} />代码</button>}
+        {node.formula && <button title={node.formula} onClick={() => onOpenDetails(node.id)}><Sigma size={12} />公式</button>}
+        {node.image && <button title="此主题包含图片" onClick={() => onOpenDetails(node.id)}><span className="outline-meta-image"><img src={node.image.url} alt="" /></span>图片</button>}
+        {node.attachments.length > 0 && <button title={node.attachments.map((item) => item.fileName).join('\n')} onClick={() => onOpenDetails(node.id)}><Paperclip size={12} />{node.attachments.length}</button>}
+      </div>}
       {node.collapsed && node.children.length > 0 && <span className="outline-child-count">{node.children.length}</span>}
     </div>
   )
@@ -208,19 +333,94 @@ function findTitle(root: NodeData, id: string): string {
   return ''
 }
 
-export function OutlineEditor({ root, documentTitle, onRenameDocument }: {
+function FormattingToolbar({ selection, editor, close }: {
+  selection: FormatSelection
+  editor?: HTMLElement
+  close: () => void
+}) {
+  const restoreSelection = () => {
+    if (!editor) return false
+    editor.focus({ preventScroll: true })
+    const browserSelection = window.getSelection()
+    browserSelection?.removeAllRanges()
+    browserSelection?.addRange(selection.range)
+    return true
+  }
+
+  const command = (name: string, value?: string) => {
+    if (!restoreSelection()) return
+    document.execCommand(name, false, value)
+    close()
+  }
+
+  const wrap = (tagName: 'code' | 'span', cloze = false) => {
+    if (!restoreSelection()) return
+    const current = window.getSelection()
+    if (!current?.rangeCount || current.isCollapsed) return
+    const range = current.getRangeAt(0)
+    const wrapper = document.createElement(tagName)
+    if (cloze) wrapper.dataset.cloze = 'true'
+    wrapper.append(range.extractContents())
+    range.insertNode(wrapper)
+    current.removeAllRanges()
+    const next = document.createRange()
+    next.selectNodeContents(wrapper)
+    current.addRange(next)
+    close()
+  }
+
+  const createLink = () => {
+    const href = window.prompt('输入链接地址（http://、https:// 或 mailto:）')
+    if (href?.trim()) command('createLink', href.trim())
+  }
+
+  return (
+    <div
+      className="outline-format-toolbar"
+      style={{ left: selection.left, top: selection.top - 10 }}
+      role="toolbar"
+      aria-label="文字格式"
+      onPointerDown={(event) => event.preventDefault()}
+    >
+      <button aria-label="加粗" title="加粗（Ctrl+B）" onClick={() => command('bold')}><Bold size={14} /></button>
+      <button aria-label="斜体" title="斜体（Ctrl+I）" onClick={() => command('italic')}><Italic size={14} /></button>
+      <button aria-label="下划线" title="下划线（Ctrl+U）" onClick={() => command('underline')}><Underline size={14} /></button>
+      <button aria-label="删除线" title="删除线" onClick={() => command('strikeThrough')}><Strikethrough size={14} /></button>
+      <i />
+      <button aria-label="红色文字" className="format-color red" title="红色文字" onClick={() => command('foreColor', '#c14f4f')} />
+      <button aria-label="蓝色文字" className="format-color blue" title="蓝色文字" onClick={() => command('foreColor', '#426fa3')} />
+      <button aria-label="黄色高亮" title="黄色高亮" onClick={() => command('hiliteColor', '#fff1a8')}><Highlighter size={14} /></button>
+      <i />
+      <button aria-label="链接" title="添加链接" onClick={createLink}><Link2 size={14} /></button>
+      <button aria-label="行内代码" title="行内代码" onClick={() => wrap('code')}><Code size={14} /></button>
+      <button aria-label="挖空" title="挖空文字" onClick={() => wrap('span', true)}><EyeOff size={14} /></button>
+    </div>
+  )
+}
+
+export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDetails, showNumbering = false }: {
   root: NodeData
   documentTitle: string
   onRenameDocument: (title: string) => void
+  onOpenDetails: (nodeId: string) => void
+  showNumbering?: boolean
 }) {
-  const inputsRef = useRef(new Map<string, HTMLTextAreaElement>())
+  const inputsRef = useRef(new Map<string, HTMLElement>())
   const explicitFocusRef = useRef<string | undefined>(undefined)
   const [dragState, setDragState] = useState<{ id: string; position: DropPosition }>()
+  const [formatSelection, setFormatSelection] = useState<FormatSelection>()
   const selectedNodeId = useSelectionStore((state) => state.selectedNodeId)
+  const selectedNodeIds = useSelectionStore((state) => state.selectedNodeIds)
+  const selectionAnchorId = useSelectionStore((state) => state.selectionAnchorId)
   const setSelectedNode = useSelectionStore((state) => state.setSelectedNode)
+  const setSelectedNodes = useSelectionStore((state) => state.setSelectedNodes)
+  const toggleSelectedNode = useSelectionStore((state) => state.toggleSelectedNode)
+  const clearSelection = useSelectionStore((state) => state.clearSelection)
   const visible = useMemo(() => flattenVisible(root.children), [root])
+  const selectedSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds])
+  const hasClipboard = useDocumentStore((state) => Boolean(state.clipboard))
 
-  const registerInput = (id: string, element: HTMLTextAreaElement | null) => {
+  const registerInput = (id: string, element: HTMLElement | null) => {
     if (element) inputsRef.current.set(id, element)
     else inputsRef.current.delete(id)
   }
@@ -231,18 +431,16 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument }: {
       const input = inputsRef.current.get(id)
       if (!input) return
       input.focus({ preventScroll: true })
-      const end = input.value.length
-      if (caret === 'all') input.setSelectionRange(0, end)
-      else {
-        const offset = caret === 'end' ? end : Math.min(caret, end)
-        input.setSelectionRange(offset, offset)
-      }
+      const length = input.textContent?.length ?? 0
+      if (caret === 'all') setEditorSelection(input, 0, length)
+      else setEditorSelection(input, caret === 'end' ? length : Math.min(caret, length))
       input.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }))
   }
 
   useEffect(() => {
     if (!selectedNodeId || !inputsRef.current.has(selectedNodeId)) return
+    if (selectedNodeIds.length > 1) return
     if (explicitFocusRef.current === selectedNodeId) {
       explicitFocusRef.current = undefined
       return
@@ -250,7 +448,58 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument }: {
     focusNode(selectedNodeId)
     // Only external selection changes should move focus; typing does not change the id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNodeId])
+  }, [selectedNodeId, selectedNodeIds.length])
+
+  const selectNode = (id: string, mode: 'single' | 'toggle' | 'range') => {
+    setFormatSelection(undefined)
+    if (mode === 'toggle') {
+      toggleSelectedNode(id)
+      return
+    }
+    if (mode === 'range' && selectionAnchorId) {
+      const anchorIndex = visible.findIndex((item) => item.node.id === selectionAnchorId)
+      const currentIndex = visible.findIndex((item) => item.node.id === id)
+      if (anchorIndex >= 0 && currentIndex >= 0) {
+        const from = Math.min(anchorIndex, currentIndex)
+        const to = Math.max(anchorIndex, currentIndex)
+        setSelectedNodes(visible.slice(from, to + 1).map((item) => item.node.id), id)
+        return
+      }
+    }
+    setSelectedNode(id)
+  }
+
+  const bulkDelete = () => {
+    if (!selectedNodeIds.length) return
+    useDocumentStore.getState().removeMany(selectedNodeIds)
+    clearSelection()
+  }
+
+  const bulkToggleTasks = () => {
+    const nodes = visible.filter((item) => selectedSet.has(item.node.id)).map((item) => item.node)
+    const nextStatus = nodes.length > 0 && nodes.every((node) => node.taskStatus === 'done') ? 'todo' : 'done'
+    useDocumentStore.getState().updateMany(selectedNodeIds, { taskStatus: nextStatus })
+  }
+
+  const bulkToggleCollapsed = () => {
+    const branches = visible.filter((item) => selectedSet.has(item.node.id) && item.node.children.length).map((item) => item.node)
+    const collapse = branches.some((node) => !node.collapsed)
+    useDocumentStore.getState().updateMany(branches.map((node) => node.id), { collapsed: collapse })
+  }
+
+  const bulkCopy = (cut = false) => {
+    if (cut) useDocumentStore.getState().cutMany(selectedNodeIds)
+    else useDocumentStore.getState().copyMany(selectedNodeIds)
+  }
+
+  const bulkPaste = () => {
+    if (!selectedNodeId) return
+    const pastedId = useDocumentStore.getState().paste(selectedNodeId)
+    if (pastedId) {
+      setSelectedNode(pastedId)
+      focusNode(pastedId, 'all')
+    }
+  }
 
   const createFirst = () => {
     const id = useDocumentStore.getState().insertChild(root.id, '')
@@ -262,6 +511,8 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument }: {
   return (
     <main className="outline-stage" onDragLeave={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragState(undefined)
+    }} onPointerDown={(event) => {
+      if (!(event.target as HTMLElement).closest('.outline-format-toolbar, .outline-topic-input')) setFormatSelection(undefined)
     }}>
       <section className="outline-document">
         <input
@@ -271,22 +522,46 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument }: {
           placeholder="未命名文档"
           onChange={(event) => onRenameDocument(event.target.value)}
         />
-        <div className="outline-hint">Enter 新建同级 · Tab 缩进 · Shift + Tab 提升 · 拖动圆点调整结构</div>
+        <div className="outline-hint">Enter 新建同级 · Tab 缩进 · Shift + Tab 提升 · Ctrl / Shift 点击圆点多选 · 拖动手柄调整结构</div>
         <div className="outline-list" role="tree" aria-label="文档大纲">
-          {visible.map(({ node, depth }, index) => <OutlineRow
+          {visible.map(({ node, depth, number }, index) => <OutlineRow
             key={node.id}
             node={node}
             depth={depth}
+            number={number}
+            showNumbering={showNumbering}
             previousId={visible[index - 1]?.node.id}
             nextId={visible[index + 1]?.node.id}
+            selected={selectedSet.has(node.id)}
             registerInput={registerInput}
             focusNode={focusNode}
             dragState={dragState}
             setDragState={setDragState}
+            onFormatSelection={setFormatSelection}
+            onSelect={selectNode}
+            onOpenDetails={(id) => {
+              setSelectedNode(id)
+              onOpenDetails(id)
+            }}
           />)}
           {!visible.length && <button className="outline-empty-topic" onClick={createFirst}><Plus size={16} />输入第一个主题</button>}
         </div>
       </section>
+      {formatSelection && <FormattingToolbar
+        selection={formatSelection}
+        editor={inputsRef.current.get(formatSelection.nodeId)}
+        close={() => setFormatSelection(undefined)}
+      />}
+      {selectedNodeIds.length > 1 && <div className="outline-bulk-toolbar" role="toolbar" aria-label="批量操作">
+        <strong>已选 {selectedNodeIds.length} 项</strong>
+        <button onClick={() => bulkCopy()} title="复制选中主题"><Copy size={15} />复制</button>
+        <button onClick={() => bulkCopy(true)} title="剪切选中主题"><Scissors size={15} />剪切</button>
+        {hasClipboard && <button onClick={bulkPaste} title="粘贴到当前主题下"><ClipboardPaste size={15} />粘贴</button>}
+        <button onClick={bulkToggleTasks} title="切换完成状态"><ListChecks size={15} />完成</button>
+        <button onClick={bulkToggleCollapsed} title="折叠或展开选中分支"><UnfoldVertical size={15} />折叠</button>
+        <button className="danger" onClick={bulkDelete} title="删除选中主题及其下级"><Trash2 size={15} />删除</button>
+        <button onClick={clearSelection}>取消</button>
+      </div>}
     </main>
   )
 }

@@ -30,6 +30,7 @@ export interface NodeImage {
 export interface NodeData {
   id: string
   title: string
+  richText?: string
   children: NodeData[]
   collapsed: boolean
   order: number
@@ -83,6 +84,6 @@ export type SaveStatus = 'saving' | 'local' | 'error'
 
 export interface ClipboardPayload {
   mode: 'copy' | 'cut'
-  node: NodeData
-  sourceId: string
+  nodes: NodeData[]
+  sourceIds: string[]
 }
