@@ -1,7 +1,7 @@
 {
   "name": "siweidaotu",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "本地优先的个人知识思维导图与论文阅读工具",
   "author": "fly-01-hub",
   "type": "module",
@@ -82,7 +82,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
@@ -94,7 +96,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "ResearchMind 枝间",
-      "installerLanguages": ["zh_CN", "en_US"],
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
       "language": "2052"
     }
   }

@@ -8,6 +8,7 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import type { NodeData } from '../../types/mindmap'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
+import { findParent } from '../../utils/tree'
 
 interface VisibleNode { node: NodeData; depth: number; number: string }
 type DropPosition = 'before' | 'inside' | 'after'
@@ -108,6 +109,8 @@ function OutlineRow({
   onOpenDetails: (id: string) => void
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null)
+  const [descriptionEditing, setDescriptionEditing] = useState(false)
   const setSelectedNode = useSelectionStore((state) => state.setSelectedNode)
 
   useEffect(() => {
@@ -148,6 +151,65 @@ function OutlineRow({
     const value = readEditor()
     const store = useDocumentStore.getState()
     const mod = event.ctrlKey || event.metaKey
+
+    if (event.shiftKey && event.key === 'Enter') {
+      event.preventDefault()
+      commit()
+      setDescriptionEditing(true)
+      requestAnimationFrame(() => descriptionRef.current?.focus())
+      return
+    }
+    if (mod && event.key === 'Enter') {
+      event.preventDefault()
+      document.execCommand('strikeThrough')
+      commit()
+      return
+    }
+    if (mod && event.shiftKey && event.key.toLowerCase() === 'x' && range && start !== end) {
+      event.preventDefault()
+      const wrapper = document.createElement('span')
+      wrapper.dataset.cloze = 'true'
+      wrapper.append(range.extractContents())
+      range.insertNode(wrapper)
+      setEditorSelection(editor, start, end)
+      commit()
+      return
+    }
+    if (mod && ['b', 'i', 'u'].includes(event.key.toLowerCase())) {
+      event.preventDefault()
+      document.execCommand(event.key.toLowerCase() === 'b' ? 'bold' : event.key.toLowerCase() === 'i' ? 'italic' : 'underline')
+      commit()
+      return
+    }
+    if (mod && event.key.toLowerCase() === 'k' && range && start !== end) {
+      event.preventDefault()
+      const href = window.prompt('输入链接地址（http://、https:// 或 mailto:）')?.trim()
+      if (href) {
+        setEditorSelection(editor, start, end)
+        document.execCommand('createLink', false, href)
+        commit()
+      }
+      return
+    }
+    if (event.altKey && !mod) {
+      const color = ({ d: '#37413b', r: '#c14f4f', y: '#a67c00', g: '#3f7652', b: '#426fa3', p: '#76558f' } as Record<string, string>)[event.key.toLowerCase()]
+      if (color && range && start !== end) {
+        event.preventDefault()
+        setEditorSelection(editor, start, end)
+        document.execCommand('foreColor', false, color)
+        commit()
+        return
+      }
+      if (event.key.toLowerCase() === 'l' && range && start !== end) {
+        event.preventDefault()
+        const wrapper = document.createElement('code')
+        wrapper.append(range.extractContents())
+        range.insertNode(wrapper)
+        setEditorSelection(editor, start, end)
+        commit()
+        return
+      }
+    }
 
     if (event.key === 'Enter' && !event.shiftKey && range) {
       event.preventDefault()
@@ -213,7 +275,26 @@ function OutlineRow({
     }
     if (mod && event.shiftKey && event.key.toLowerCase() === 'l') {
       event.preventDefault()
-      store.updateNode(node.id, { taskStatus: node.taskStatus === 'none' ? 'todo' : node.taskStatus === 'done' ? 'none' : 'done' })
+      store.updateNode(node.id, { taskStatus: node.taskStatus === 'none' ? 'todo' : 'none' })
+      return
+    }
+    if (mod && event.shiftKey && event.key.toLowerCase() === 'k') {
+      event.preventDefault()
+      store.updateNode(node.id, { taskStatus: node.taskStatus === 'done' ? 'todo' : 'done' })
+      return
+    }
+    if (mod && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      const currentDocument = store.documents.find((item) => item.id === store.activeDocumentId)
+      const match = currentDocument && findParent(currentDocument.root, node.id)
+      if (!match) return
+      const sibling = event.key === 'ArrowUp'
+        ? match.parent.children[match.index - 1]
+        : match.parent.children[match.index + 1]
+      if (!sibling) return
+      event.preventDefault()
+      commit()
+      store.moveRelative(node.id, sibling.id, event.key === 'ArrowUp' ? 'before' : 'after')
+      focusNode(node.id, start)
       return
     }
     if (event.altKey && event.key === '.') {
@@ -286,6 +367,13 @@ function OutlineRow({
           registerInput(node.id, element)
         }}
         className="outline-topic-input"
+        style={{
+          color: node.style.color,
+          background: node.style.background,
+          fontWeight: node.style.fontWeight,
+          fontStyle: node.style.fontStyle,
+          textDecoration: node.style.textDecoration,
+        }}
         contentEditable
         suppressContentEditableWarning
         role="textbox"
@@ -310,10 +398,42 @@ function OutlineRow({
           document.execCommand('insertText', false, event.clipboardData.getData('text/plain'))
         }}
       />
-      {(node.tags.length > 0 || node.hyperlink || node.note || node.code || node.formula || node.table || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
+      <div className="outline-topic-tools" aria-label="主题快捷操作">
+        <button title="添加下级主题（Tab）" aria-label="添加下级主题" onClick={() => {
+          const id = useDocumentStore.getState().insertChild(node.id, '')
+          if (id) { setSelectedNode(id); focusNode(id, 0) }
+        }}><Plus size={13} /></button>
+        <button title="添加或取消待办（Ctrl+Shift+L）" aria-label="切换待办" onClick={() => useDocumentStore.getState().updateNode(node.id, { taskStatus: node.taskStatus === 'none' ? 'todo' : 'none' })}><ListChecks size={13} /></button>
+        <button title="编辑描述（Shift+Enter）" aria-label="编辑描述" onClick={() => {
+          setSelectedNode(node.id)
+          setDescriptionEditing(true)
+          requestAnimationFrame(() => descriptionRef.current?.focus())
+        }}><StickyNote size={13} /></button>
+      </div>
+      {(node.note || descriptionEditing) && <div className="outline-description">
+        {descriptionEditing ? <textarea
+          ref={descriptionRef}
+          value={node.note}
+          aria-label={`${node.title || '主题'}的描述`}
+          placeholder="输入描述；Shift + Enter 返回主题"
+          rows={Math.min(8, Math.max(1, node.note.split('\n').length))}
+          onChange={(event) => useDocumentStore.getState().updateNode(node.id, { note: event.target.value })}
+          onBlur={() => setDescriptionEditing(false)}
+          onKeyDown={(event) => {
+            if (event.shiftKey && event.key === 'Enter') {
+              event.preventDefault()
+              setDescriptionEditing(false)
+              focusNode(node.id, 'end')
+            }
+          }}
+        /> : <button title="点击编辑描述" onClick={() => {
+          setDescriptionEditing(true)
+          requestAnimationFrame(() => descriptionRef.current?.focus())
+        }}>{node.note}</button>}
+      </div>}
+      {(node.tags.length > 0 || node.hyperlink || node.code || node.formula || node.table || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
         {node.tags.map((tag) => <span className="outline-meta-tag" key={tag}>#{tag}</span>)}
         {node.hyperlink && <a href={node.hyperlink} target="_blank" rel="noreferrer" title={node.hyperlink}><ExternalLink size={12} />链接</a>}
-        {node.note && <button title={node.note} onClick={() => onOpenDetails(node.id)}><StickyNote size={12} />描述</button>}
         {node.code && <button title={node.code} onClick={() => onOpenDetails(node.id)}><FileCode2 size={12} />代码</button>}
         {node.formula && <button title={node.formula} onClick={() => onOpenDetails(node.id)}><Sigma size={12} />公式</button>}
         {node.table && <button title={`${node.table.headers.length} 列 × ${node.table.rows.length} 行`} onClick={() => onOpenDetails(node.id)}><Table2 size={12} />表格 {node.table.rows.length}</button>}

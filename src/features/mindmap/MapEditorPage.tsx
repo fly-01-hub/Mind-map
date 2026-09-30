@@ -1,8 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ArrowLeft, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, Hash, History, ListTree,
+  ArrowLeft, Bold, BookOpen, Check, ChevronRight, CircleAlert, CircleHelp, Focus, Hash, History, Italic, ListTree,
   Eye, FileDown, FileUp, ImageDown, Link2, Maximize2, Minus, MoreHorizontal, Palette, PanelRight,
-  Presentation, Network, Plus, Redo2, Search, Undo2, X, ZoomIn, ZoomOut,
+  Presentation, Network, Plus, Redo2, Search, Trash2, Underline, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -11,7 +11,7 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useSaveStore } from '../../stores/saveStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import { useUiStore } from '../../stores/uiStore'
-import { countNodes, findNode, getBreadcrumbs } from '../../utils/tree'
+import { countNodes, findNode, findParent, getBreadcrumbs } from '../../utils/tree'
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
@@ -51,7 +51,6 @@ export function MapEditorPage() {
   const composingRef = useRef(false)
   const pendingEditRef = useRef<string | undefined>(undefined)
   const panPointerRef = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined)
-  const selectionDragRef = useRef<{ x: number; y: number; endX: number; endY: number } | undefined>(undefined)
   const handledNavigationRef = useRef('')
   const focusedNavigationRef = useRef('')
   const [engineReady, setEngineReady] = useState(false)
@@ -67,6 +66,7 @@ export function MapEditorPage() {
   const [presentationMode, setPresentationMode] = useState(false)
   const [canvasScale, setCanvasScale] = useState(1)
   const [isPanning, setIsPanning] = useState(false)
+  const [descriptionFocusRequest, setDescriptionFocusRequest] = useState<{ nodeId: string; nonce: number }>()
   const [editorView, setEditorView] = useState<'outline' | 'mindmap'>(() =>
     window.localStorage.getItem('zhijian-editor-view') === 'mindmap' ? 'mindmap' : 'outline')
   const [outlineNumbering, setOutlineNumbering] = useState(() => window.localStorage.getItem('zhijian-outline-numbering') === 'true')
@@ -278,42 +278,46 @@ export function MapEditorPage() {
     window.addEventListener('pointerup', stop, { once: true })
   }
 
-  const finishSelectionDelete = (startX: number, startY: number, endX: number, endY: number) => {
-    if (Math.hypot(endX - startX, endY - startY) < 8) return
-    const bounds = {
-      left: Math.min(startX, endX), right: Math.max(startX, endX),
-      top: Math.min(startY, endY), bottom: Math.max(startY, endY),
-    }
-    const containsAll = endY >= startY
-    const nodeIds = Array.from(canvasRef.current?.querySelectorAll<HTMLElement>('.me-tpc') ?? [])
-      .filter((topic) => !topic.closest('.me-root'))
-      .filter((topic) => {
-        const rect = topic.getBoundingClientRect()
-        if (!rect.width || !rect.height) return false
-        return containsAll
-          ? rect.left >= bounds.left && rect.right <= bounds.right && rect.top >= bounds.top && rect.bottom <= bounds.bottom
-          : rect.left <= bounds.right && rect.right >= bounds.left && rect.top <= bounds.bottom && rect.bottom >= bounds.top
-      })
-      .map((topic) => (topic as HTMLElement & { nodeObj?: { id?: string } }).nodeObj?.id)
-      .filter((nodeId): nodeId is string => Boolean(nodeId))
-    if (!nodeIds.length) return
-    adapterRef.current?.clearSelection()
-    useDocumentStore.getState().removeMany(nodeIds)
-    setSelectedNode(undefined)
-    setNodeAnchor(undefined)
-  }
-
   useEffect(() => {
     const handleWindowShortcut = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || (event.key !== ']' && event.code !== 'BracketRight')) return
+      if (event.defaultPrevented) return
       const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
-      event.preventDefault()
-      command('focus')
+      const editing = Boolean(target?.matches('input, textarea, select, [contenteditable]'))
+      const mod = event.ctrlKey || event.metaKey
+      if (mod && event.altKey && event.shiftKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        changeEditorView(editorView === 'outline' ? 'mindmap' : 'outline')
+        return
+      }
+      if (mod && event.altKey && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        changeEditorView('mindmap')
+        setPresentationMode((value) => !value)
+        setInspectorOpen(false)
+        return
+      }
+      if (mod && event.key === '/') {
+        event.preventDefault()
+        setHelpOpen((value) => !value)
+        return
+      }
+      if (editing || !mod) return
+      if (event.key === ']' || event.code === 'BracketRight') {
+        event.preventDefault()
+        command('focus')
+        return
+      }
+      if ((event.key === '[' || event.code === 'BracketLeft') && selectedNodeId && document) {
+        const parent = findParent(document.root, selectedNodeId)?.parent
+        if (!parent) return
+        event.preventDefault()
+        setFocusRoot(parent.id === document.root.id ? undefined : parent.id)
+        setSelectedNode(parent.id)
+      }
     }
     window.addEventListener('keydown', handleWindowShortcut)
     return () => window.removeEventListener('keydown', handleWindowShortcut)
-  }, [command])
+  }, [command, document, editorView, selectedNodeId, setFocusRoot, setInspectorOpen, setSelectedNode])
 
   const attachFiles = async (files: FileList | File[], nodeId: string) => {
     if (!document) return
@@ -376,12 +380,30 @@ export function MapEditorPage() {
     const target = event.target as HTMLElement
     const editing = target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'))
     if (editing) {
-      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composingRef.current) {
+      if (event.key === 'Enter' && event.shiftKey && !event.nativeEvent.isComposing && !composingRef.current) {
+        event.preventDefault()
+        const editingNodeId = useSelectionStore.getState().selectedNodeId
+        target.blur()
+        if (editingNodeId) setSelectedNode(editingNodeId)
+        setInspectorOpen(true)
+        if (editingNodeId) setDescriptionFocusRequest({ nodeId: editingNodeId, nonce: Date.now() })
+      } else if (event.key === 'Enter' && !event.nativeEvent.isComposing && !composingRef.current) {
         event.preventDefault()
         const editingNodeId = useSelectionStore.getState().selectedNodeId
         target.blur()
         window.setTimeout(() => {
           if (editingNodeId) editNewNode(useDocumentStore.getState().insertSibling(editingNodeId))
+        }, 0)
+      } else if (event.key === 'Tab' && !event.nativeEvent.isComposing && !composingRef.current) {
+        event.preventDefault()
+        const editingNodeId = useSelectionStore.getState().selectedNodeId
+        target.blur()
+        window.setTimeout(() => {
+          if (!editingNodeId) return
+          if (event.shiftKey) {
+            useDocumentStore.getState().promote(editingNodeId)
+            setSelectedNode(editingNodeId)
+          } else editNewNode(useDocumentStore.getState().insertChild(editingNodeId))
         }, 0)
       } else if (event.key === 'Escape') {
         event.preventDefault(); target.blur()
@@ -497,6 +519,17 @@ export function MapEditorPage() {
           onPointerDownCapture={(event) => {
             const target = event.target as HTMLElement
             if (!(event.target as HTMLElement).isContentEditable) event.currentTarget.focus({ preventScroll: true })
+            const anchor = adapterRef.current?.resolveNode(target)
+            if (event.button === 0 && event.shiftKey && anchor) {
+              event.preventDefault()
+              event.stopPropagation()
+              event.nativeEvent.stopImmediatePropagation()
+              const current = useSelectionStore.getState().selectedNodeIds
+              const next = current.includes(anchor.id) ? current.filter((id) => id !== anchor.id) : [...current, anchor.id]
+              setSelectedNodes(next, next.includes(anchor.id) ? anchor.id : next.at(-1))
+              adapterRef.current?.setSelections(next)
+              return
+            }
             if (event.button === 0 && selectedNodeIds.length > 1 && adapterRef.current?.resolveNode(target)) {
               adapterRef.current.setSelections([])
             }
@@ -508,9 +541,6 @@ export function MapEditorPage() {
               setIsPanning(true)
               return
             }
-            if (event.button === 0 && target.classList.contains('map-container')) {
-              selectionDragRef.current = { x: event.clientX, y: event.clientY, endX: event.clientX, endY: event.clientY }
-            }
           }}
           onPointerMoveCapture={(event) => {
             const pan = panPointerRef.current
@@ -521,8 +551,6 @@ export function MapEditorPage() {
               panPointerRef.current = { ...pan, x: event.clientX, y: event.clientY }
               return
             }
-            const selection = selectionDragRef.current
-            if (selection) selectionDragRef.current = { ...selection, endX: event.clientX, endY: event.clientY }
           }}
           onPointerUpCapture={(event) => {
             const pan = panPointerRef.current
@@ -532,13 +560,6 @@ export function MapEditorPage() {
               panPointerRef.current = undefined
               setIsPanning(false)
               return
-            }
-            const selection = selectionDragRef.current
-            selectionDragRef.current = undefined
-            if (selection) {
-              const endX = event.clientX
-              const endY = event.clientY
-              window.setTimeout(() => finishSelectionDelete(selection.x, selection.y, endX, endY), 0)
             }
           }}
           onLostPointerCapture={() => {
@@ -608,9 +629,14 @@ export function MapEditorPage() {
             // Keep focus and the browser's text selection inside the inline editor.
             // Focusing the stage here would discard a drag-selected text range before
             // the user can delete it with Backspace.
-            if ((event.target as HTMLElement).closest('#input-box[contenteditable="true"]')) return
-            event.currentTarget.focus({ preventScroll: true })
+            if ((event.target as HTMLElement).closest('#input-box[contenteditable]')) return
             const anchor = adapterRef.current?.resolveNode(event.target)
+            if (event.shiftKey && anchor) {
+              event.preventDefault()
+              event.stopPropagation()
+              return
+            }
+            event.currentTarget.focus({ preventScroll: true })
             if (anchor) {
               setSelectedNode(anchor.id)
               adapterRef.current?.select(anchor.id)
@@ -633,7 +659,7 @@ export function MapEditorPage() {
             }}>{nodeAnchor.collapsed ? <Plus size={12} /> : <Minus size={12} />}</button>}
             {nodeAnchor.id === selectedNodeId && <button className="node-mini-button add-button" aria-label="添加子主题" onClick={() => command('child')}><Plus size={14} /></button>}
           </div>}
-          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '双击编辑 · 中键平移 · 左键拖框删除 · 拖入 PDF'}</span><kbd>?</kbd></button>}
+          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '双击编辑 · Shift 点击多选 · 空白处拖框选择 · 中键平移'}</span><kbd>Ctrl /</kbd></button>}
           <div className="canvas-controls">
             <button onClick={() => adapterRef.current?.center()} title="居中" aria-label="居中"><Focus size={16} /></button>
             <button onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布" aria-label="适应画布"><Maximize2 size={16} /></button>
@@ -647,8 +673,30 @@ export function MapEditorPage() {
           </div>
         </main>}
       </NodeContextMenu>
+      {editorView === 'mindmap' && selectedNodeId && !presentationMode && <div className="map-selection-toolbar" role="toolbar" aria-label="主题操作">
+        <strong>{selectedNodeIds.length > 1 ? `已选 ${selectedNodeIds.length} 项` : selectedNode?.title || '当前主题'}</strong>
+        {selectedNodeIds.length === 1 && <>
+          <button onClick={() => command('sibling')} disabled={isRoot} title="Enter"><Plus size={14} />同级</button>
+          <button onClick={() => command('child')} title="Tab"><Plus size={14} />下级</button>
+          <button onClick={() => selectedNode && useDocumentStore.getState().updateNode(selectedNode.id, { taskStatus: selectedNode.taskStatus === 'none' ? 'todo' : 'none' })}><Check size={14} />待办</button>
+          <button onClick={() => {
+            setInspectorOpen(true)
+            if (selectedNode) setDescriptionFocusRequest({ nodeId: selectedNode.id, nonce: Date.now() })
+          }}><PanelRight size={14} />描述</button>
+          <i />
+          <button className={selectedNode?.style.fontWeight === '700' ? 'active' : ''} aria-label="主题加粗" title="加粗" onClick={() => selectedNode && useDocumentStore.getState().updateNode(selectedNode.id, { style: { ...selectedNode.style, fontWeight: selectedNode.style.fontWeight === '700' ? undefined : '700' } })}><Bold size={14} /></button>
+          <button className={selectedNode?.style.fontStyle === 'italic' ? 'active' : ''} aria-label="主题斜体" title="斜体" onClick={() => selectedNode && useDocumentStore.getState().updateNode(selectedNode.id, { style: { ...selectedNode.style, fontStyle: selectedNode.style.fontStyle === 'italic' ? undefined : 'italic' } })}><Italic size={14} /></button>
+          <button className={selectedNode?.style.textDecoration === 'underline' ? 'active' : ''} aria-label="主题下划线" title="下划线" onClick={() => selectedNode && useDocumentStore.getState().updateNode(selectedNode.id, { style: { ...selectedNode.style, textDecoration: selectedNode.style.textDecoration === 'underline' ? undefined : 'underline' } })}><Underline size={14} /></button>
+          {!isRoot && <button onClick={() => setRelationPickerOpen(true)}><Link2 size={14} />连接</button>}
+        </>}
+        {!isRoot && <button className="danger" onClick={() => {
+          if (selectedNodeIds.length > 1) useDocumentStore.getState().removeMany(selectedNodeIds)
+          else command('remove')
+          setSelectedNode(undefined)
+        }}><Trash2 size={14} />删除</button>}
+      </div>}
       {presentationMode && <button className="presentation-exit" onClick={() => setPresentationMode(false)}><X size={16} />退出演示</button>}
-      {inspectorOpen && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} /></Suspense></>}
+      {inspectorOpen && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} focusNoteRequest={descriptionFocusRequest} /></Suspense></>}
       <HistoryDialog document={document} open={historyOpen} onOpenChange={setHistoryOpen} />
       <ImportMarkdownDialog open={importOpen} onOpenChange={setImportOpen} onImport={importMarkdown} onImportFile={importStructuredFile} />
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />

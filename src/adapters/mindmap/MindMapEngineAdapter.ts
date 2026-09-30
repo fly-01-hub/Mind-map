@@ -292,6 +292,7 @@ export class MindMapEngineAdapter {
       color: node.style.color,
       background: node.style.background,
       fontWeight: node.style.fontWeight,
+      fontStyle: node.style.fontStyle,
       textDecoration: node.style.textDecoration,
     }
     return {

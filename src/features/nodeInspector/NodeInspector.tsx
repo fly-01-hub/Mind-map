@@ -2,7 +2,7 @@ import {
   Bold, BookOpen, Check, Code2, ExternalLink, File, FileImage, FileText, Italic,
   Link2, Paperclip, Plus, Quote, Sigma, Table2, Tag, Trash2, Underline, Unlink, X,
 } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -42,11 +42,12 @@ function attachmentIcon(attachment: Attachment) {
   return <File size={15} />
 }
 
-export function NodeInspector({ node, documentId, close }: { node?: NodeData; documentId: string; close: () => void }) {
+export function NodeInspector({ node, documentId, close, focusNoteRequest }: { node?: NodeData; documentId: string; close: () => void; focusNoteRequest?: { nodeId: string; nonce: number } }) {
   const updateNode = useDocumentStore((state) => state.updateNode)
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const paperInputRef = useRef<HTMLInputElement>(null)
+  const noteInputRef = useRef<HTMLTextAreaElement>(null)
   const [title, setTitle] = useState(node?.title ?? '')
   const [link, setLink] = useState(node?.hyperlink ?? '')
   const [note, setNote] = useState(node?.note ?? '')
@@ -67,6 +68,12 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
   const uploadAndLink = usePaperStore((state) => state.uploadAndLink)
   const linkPaper = usePaperStore((state) => state.linkPaper)
   const unlinkPaper = usePaperStore((state) => state.unlinkPaper)
+
+  useEffect(() => {
+    if (!focusNoteRequest || focusNoteRequest.nodeId !== node?.id) return
+    const frame = requestAnimationFrame(() => noteInputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [focusNoteRequest, node?.id])
 
   const linkedPapers = useMemo(() => {
     if (!node) return []
@@ -163,7 +170,7 @@ export function NodeInspector({ node, documentId, close }: { node?: NodeData; do
 
         <section className="inspector-block">
           <div className="inspector-label-row"><label htmlFor="node-note">Markdown 笔记</label><button className="preview-toggle" onClick={() => setPreview((value) => !value)}>{preview ? '编辑' : '预览'}</button></div>
-          {preview ? <div className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{note || '*暂无笔记*'}</ReactMarkdown></div> : <textarea id="node-note" className="inspector-input note-textarea" rows={7} value={note} onChange={(event) => setNote(event.target.value)} onBlur={() => { if (note !== node.note) patch({ note }) }} placeholder="记录摘要、想法或引用…" />}
+          {preview ? <div className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{note || '*暂无笔记*'}</ReactMarkdown></div> : <textarea ref={noteInputRef} id="node-note" className="inspector-input note-textarea" rows={7} value={note} onChange={(event) => setNote(event.target.value)} onBlur={() => { if (note !== node.note) patch({ note }) }} placeholder="记录摘要、想法或引用…" />}
         </section>
 
         <section className="inspector-block compact-block">
