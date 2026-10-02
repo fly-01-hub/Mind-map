@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   ArrowLeft, Bold, BookOpen, Braces, Check, CheckSquare, ChevronRight, CircleAlert, CircleHelp, Copy, Focus, Hash, History, ImagePlus, Italic, ListTree,
   Eye, FileDown, FileUp, ImageDown, Link2, Maximize2, Minus, MoreHorizontal, Palette, PanelRight,
-  Presentation, Network, Plus, Redo2, Search, Trash2, Underline, Undo2, X, ZoomIn, ZoomOut,
+  Presentation, Network, Plus, Redo2, Search, Trash2, Underline, Undo2, X, ZoomIn, ZoomOut, MoveRight,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -66,6 +66,8 @@ export function MapEditorPage() {
   const pendingEditRef = useRef<string | undefined>(undefined)
   const pendingRevealRef = useRef<string | undefined>(undefined)
   const panPointerRef = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined)
+  const stopPanRef = useRef<(() => void) | undefined>(undefined)
+  const spacePressedRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const handledNavigationRef = useRef('')
   const focusedNavigationRef = useRef('')
@@ -79,6 +81,8 @@ export function MapEditorPage() {
   const [relationPickerOpen, setRelationPickerOpen] = useState(false)
   const [relationSourceId, setRelationSourceId] = useState<string>()
   const [relationQuery, setRelationQuery] = useState('')
+  const [movePickerOpen, setMovePickerOpen] = useState(false)
+  const [moveQuery, setMoveQuery] = useState('')
   const [readOnly, setReadOnly] = useState(false)
   const [presentationMode, setPresentationMode] = useState(false)
   const [canvasScale, setCanvasScale] = useState(1)
@@ -120,6 +124,15 @@ export function MapEditorPage() {
   const viewRoot = useMemo(() => document && (focusRootId ? findNode(document.root, focusRootId) : document.root), [document, focusRootId])
   const selectedNode = document && selectedNodeId ? findNode(document.root, selectedNodeId) : undefined
   const summaryAvailable = Boolean(document && canCreateSummary(document.root, selectedNodeIds))
+  const unavailableMoveTargetIds = useMemo(() => {
+    const unavailable = new Set<string>()
+    if (!document) return unavailable
+    for (const nodeId of selectedNodeIds) {
+      const node = findNode(document.root, nodeId)
+      if (node) flattenNodes(node).forEach((item) => unavailable.add(item.id))
+    }
+    return unavailable
+  }, [document, selectedNodeIds])
   const breadcrumbs = document && focusRootId ? getBreadcrumbs(document.root, focusRootId) : []
   const searchResults = useMemo(() => document ? searchDocuments([document], searchQuery) : [], [document, searchQuery])
   const markdownPaperSources = useMemo(() => {
@@ -141,6 +154,23 @@ export function MapEditorPage() {
     if (id) openDocument(id)
     return () => setFocusRoot(undefined)
   }, [id, openDocument, setFocusRoot])
+
+  useEffect(() => {
+    const releaseSpace = (event: KeyboardEvent) => {
+      if (event.code === 'Space') spacePressedRef.current = false
+    }
+    const stopInteraction = () => {
+      spacePressedRef.current = false
+      stopPanRef.current?.()
+    }
+    window.addEventListener('keyup', releaseSpace, true)
+    window.addEventListener('blur', stopInteraction)
+    return () => {
+      window.removeEventListener('keyup', releaseSpace, true)
+      window.removeEventListener('blur', stopInteraction)
+      stopPanRef.current?.()
+    }
+  }, [])
 
   useEffect(() => {
     const navigationKey = `${id ?? ''}:${targetNodeId ?? ''}`
@@ -484,7 +514,7 @@ export function MapEditorPage() {
     }
   }
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement
     const editing = target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'))
     if (editing) {
@@ -676,6 +706,11 @@ export function MapEditorPage() {
         setRelationPickerOpen(false)
         setRelationQuery('')
       }}><strong>{node.title}</strong><span>创建从“{selectedNode?.title}”到此主题的关联线</span></button>)}</div></div>}
+      {movePickerOpen && selectedNodeIds.length > 0 && <div className="editor-search-panel relation-picker move-picker"><div className="editor-search"><MoveRight size={16} /><input autoFocus value={moveQuery} onChange={(event) => setMoveQuery(event.target.value)} placeholder="搜索新的上级主题…" /><button className="icon-button" aria-label="关闭移动面板" onClick={() => { setMovePickerOpen(false); setMoveQuery('') }}><X size={16} /></button></div><div className="editor-search-results">{flattenNodes(document.root).filter((node) => !unavailableMoveTargetIds.has(node.id) && (!moveQuery.trim() || node.title.toLocaleLowerCase().includes(moveQuery.trim().toLocaleLowerCase()))).slice(0, 40).map((node) => <button key={node.id} aria-label={`移动到 ${node.title}`} onClick={() => {
+        useDocumentStore.getState().moveManyRelative(selectedNodeIds, node.id, 'inside')
+        setMovePickerOpen(false)
+        setMoveQuery('')
+      }}><strong>{node.title}</strong><span>将已选 {selectedNodeIds.length} 个主题移到此主题下</span></button>)}</div></div>}
       <NodeContextMenu onCommand={command} isRoot={isRoot} hasClipboard={Boolean(useDocumentStore.getState().clipboard)} disabled={readOnly || presentationMode}>
         {editorView === 'outline' ? <OutlineEditor
           root={viewRoot}
@@ -703,45 +738,48 @@ export function MapEditorPage() {
               adapterRef.current?.setSelections(next)
               return
             }
-            if (event.button === 0 && selectedNodeIds.length > 1 && adapterRef.current?.resolveNode(target)) {
-              adapterRef.current.setSelections([])
-            }
-            if (event.button === 1) {
+            if (event.button === 1 || (event.button === 0 && spacePressedRef.current)) {
               event.preventDefault()
+              event.stopPropagation()
               event.nativeEvent.stopImmediatePropagation()
+              stopPanRef.current?.()
               panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
-              event.currentTarget.setPointerCapture(event.pointerId)
               setIsPanning(true)
+              const move = (pointerEvent: PointerEvent) => {
+                const pan = panPointerRef.current
+                if (pan?.pointerId !== pointerEvent.pointerId) return
+                if (pointerEvent.cancelable) pointerEvent.preventDefault()
+                pointerEvent.stopImmediatePropagation()
+                adapterRef.current?.panBy(pointerEvent.clientX - pan.x, pointerEvent.clientY - pan.y)
+                panPointerRef.current = { ...pan, x: pointerEvent.clientX, y: pointerEvent.clientY }
+              }
+              const stop = (pointerEvent?: PointerEvent) => {
+                const pan = panPointerRef.current
+                if (pointerEvent && pan?.pointerId !== pointerEvent.pointerId) return
+                panPointerRef.current = undefined
+                setIsPanning(false)
+                window.removeEventListener('pointermove', move, true)
+                window.removeEventListener('pointerup', stop, true)
+                window.removeEventListener('pointercancel', stop, true)
+                stopPanRef.current = undefined
+              }
+              stopPanRef.current = () => stop()
+              window.addEventListener('pointermove', move, { capture: true, passive: false })
+              window.addEventListener('pointerup', stop, true)
+              window.addEventListener('pointercancel', stop, true)
               return
             }
           }}
-          onPointerMoveCapture={(event) => {
-            const pan = panPointerRef.current
-            if (pan?.pointerId === event.pointerId) {
+          onAuxClickCapture={(event) => { if (event.button === 1) event.preventDefault() }}
+          onKeyDownCapture={(event) => {
+            if (event.code === 'Space' && !(event.target as HTMLElement).matches('input, textarea, [contenteditable="true"]')) {
+              spacePressedRef.current = true
               event.preventDefault()
-              event.nativeEvent.stopImmediatePropagation()
-              adapterRef.current?.panBy(event.clientX - pan.x, event.clientY - pan.y)
-              panPointerRef.current = { ...pan, x: event.clientX, y: event.clientY }
               return
             }
+            handleKeyDown(event)
           }}
-          onPointerUpCapture={(event) => {
-            const pan = panPointerRef.current
-            if (pan?.pointerId === event.pointerId) {
-              event.preventDefault()
-              event.nativeEvent.stopImmediatePropagation()
-              panPointerRef.current = undefined
-              setIsPanning(false)
-              return
-            }
-          }}
-          onLostPointerCapture={() => {
-            if (panPointerRef.current) {
-              panPointerRef.current = undefined
-              setIsPanning(false)
-            }
-          }}
-          onKeyDownCapture={handleKeyDown}
+          onKeyUpCapture={(event) => { if (event.code === 'Space') spacePressedRef.current = false }}
           onCompositionStartCapture={() => { composingRef.current = true }}
           onCompositionEndCapture={() => { composingRef.current = false }}
           onDragEnterCapture={(event) => {
@@ -771,6 +809,15 @@ export function MapEditorPage() {
             const targetId = anchor?.id ?? fileDropTargetId ?? selectedNodeId ?? document.root.id
             setFileDropTargetId(undefined)
             void attachFiles(event.dataTransfer.files, targetId)
+          }}
+          onClickCapture={(event) => {
+            if (event.shiftKey || useSelectionStore.getState().selectedNodeIds.length <= 1) return
+            const anchor = adapterRef.current?.resolveNode(event.target)
+            if (!anchor) return
+            // A normal click narrows a multi-selection to one topic. A drag does
+            // not emit click, so group dragging still keeps every selected topic.
+            setSelectedNode(anchor.id)
+            adapterRef.current?.setSelections([anchor.id])
           }}
           onDoubleClickCapture={(event) => {
             if (readOnly || presentationMode) return
@@ -845,7 +892,7 @@ export function MapEditorPage() {
             {nodeAnchor.id === selectedNodeId && <button className="node-mini-button add-button" aria-label="添加子主题" onClick={() => command('child')}><Plus size={14} /></button>}
           </div>}
           {relationSourceId && <div className="relation-mode-hint"><Link2 size={15} />请选择另一个主题建立连接线 <button onClick={() => setRelationSourceId(undefined)}>取消</button></div>}
-          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '双击编辑 · Shift 点击多选 · 空白处拖框选择 · 中键平移'}</span><kbd>Ctrl /</kbd></button>}
+          {!fileDropTargetId && <button className="canvas-onboarding-tip" onClick={() => setHelpOpen(true)}><BookOpen size={15} /><span>{countNodes(document.root) === 1 ? '选中中心主题，按 Tab 添加第一个分支' : '双击编辑 · Shift 点击多选 · 空白处拖框选择 · 中键或空格+拖动平移'}</span><kbd>Ctrl /</kbd></button>}
           <div className="canvas-controls">
             <button onClick={() => adapterRef.current?.center()} title="居中" aria-label="居中"><Focus size={16} /></button>
             <button onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布" aria-label="适应画布"><Maximize2 size={16} /></button>
@@ -878,6 +925,7 @@ export function MapEditorPage() {
         </>}
         {selectedNodeIds.length > 1 && <>
           <button onClick={() => useDocumentStore.getState().copyMany(selectedNodeIds)}><Copy size={14} />复制</button>
+          <button className={movePickerOpen ? 'active' : ''} onClick={() => { setRelationPickerOpen(false); setMovePickerOpen((open) => !open) }}><MoveRight size={14} />移动到</button>
           <button onClick={() => updateSelected((node) => ({ taskStatus: node.taskStatus === 'none' ? 'todo' : 'none' }))}><CheckSquare size={14} />待办</button>
           <button onClick={() => updateSelected((node) => ({ taskStatus: node.taskStatus === 'done' ? 'todo' : 'done' }))}><Check size={14} />完成</button>
           <button disabled={!summaryAvailable} title={summaryAvailable ? '为相邻同级主题创建概要' : '概要要求选择相邻的同级主题'} onClick={() => useDocumentStore.getState().addSummary(selectedNodeIds)}><Braces size={14} />概要</button>
@@ -885,7 +933,7 @@ export function MapEditorPage() {
             if (selectedNodeIds.length === 2) useDocumentStore.getState().addArrow(selectedNodeIds[0], selectedNodeIds[1])
           }}><Link2 size={14} />连接</button>
         </>}
-        {!isRoot && <button className="danger" onClick={() => {
+        {!isRoot && <button className="danger" aria-label={selectedNodeIds.length > 1 ? `删除已选 ${selectedNodeIds.length} 个主题` : '删除主题'} onClick={() => {
           if (selectedNodeIds.length > 1) useDocumentStore.getState().removeMany(selectedNodeIds)
           else command('remove')
           setSelectedNode(undefined)

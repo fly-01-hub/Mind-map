@@ -38,10 +38,18 @@ export async function initializeLocalPersistence() {
   unsubscribe?.()
   unsubscribe = useDocumentStore.subscribe((state) => {
     if (!state.hydrated || (state.documents === lastDocuments && state.folders === lastFolders)) return
+    const foldersChanged = state.folders !== lastFolders
     lastDocuments = state.documents
     lastFolders = state.folders
     useSaveStore.getState().markSaving()
     if (saveTimer) window.clearTimeout(saveTimer)
+    // Folder operations are infrequent and users commonly navigate or refresh right
+    // after creating one. Persist them immediately instead of risking the debounce
+    // window dropping the change during navigation.
+    if (foldersChanged) {
+      void flushLocalPersistence().catch(() => useSaveStore.getState().setStatus('error'))
+      return
+    }
     saveTimer = window.setTimeout(async () => {
       try {
         await flushLocalPersistence()

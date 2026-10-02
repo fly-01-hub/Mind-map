@@ -16,6 +16,17 @@ test('creates a complete local backup from the library', async ({ page }) => {
   await expect(page.getByRole('status')).toContainText('备份已保存')
 })
 
+test('creates a folder with an explicit confirmation and keeps it after refresh', async ({ page }) => {
+  await page.goto('/library')
+  await page.getByRole('button', { name: '新建文件夹' }).click()
+  await page.getByRole('textbox', { name: '文件夹名称' }).fill('回归测试文件夹')
+  await page.getByRole('button', { name: '创建文件夹' }).click()
+
+  await expect(page.getByRole('button', { name: '回归测试文件夹', exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: '回归测试文件夹', exact: true })).toBeVisible()
+})
+
 test('switches library layouts and exposes the canvas operation guide', async ({ page }) => {
   await page.goto('/library')
   await page.getByRole('button', { name: '卡片视图' }).click()

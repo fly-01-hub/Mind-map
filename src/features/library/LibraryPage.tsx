@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   Archive, BookOpen, Clock3, FileText, Folder, FolderPlus, GitBranch, HardDrive, Heart,
   Download, LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, ShieldCheck,
-  Star, Tag, Trash2, X,
+  Star, Tag, Trash2, Check, X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -252,7 +252,11 @@ export function LibraryPage() {
           <button className={filter === 'favorites' ? 'active' : ''} onClick={() => setFilter('favorites')}><Heart size={17} />收藏</button>
         </nav>
         <div className="sidebar-section-title"><span>文件夹</span><button className="tiny-button" aria-label="新建文件夹" onClick={() => setAddingFolder(true)}><FolderPlus size={15} /></button></div>
-        {addingFolder && <div className="folder-create"><input autoFocus value={folderDraft} onChange={(event) => setFolderDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') setAddingFolder(false) }} placeholder="文件夹名称" /><button onClick={() => setAddingFolder(false)}><X size={13} /></button></div>}
+        {addingFolder && <form className="folder-create" onSubmit={(event) => { event.preventDefault(); submitFolder() }}>
+          <input autoFocus value={folderDraft} onChange={(event) => setFolderDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setFolderDraft(''); setAddingFolder(false) } }} placeholder="文件夹名称" aria-label="文件夹名称" />
+          <button type="submit" className="confirm" aria-label="创建文件夹" title="创建文件夹" disabled={!folderDraft.trim()}><Check size={13} /></button>
+          <button type="button" aria-label="取消新建文件夹" title="取消" onClick={() => { setFolderDraft(''); setAddingFolder(false) }}><X size={13} /></button>
+        </form>}
         <nav className="sidebar-nav folders">
           {folders.filter((folder) => !folder.deletedAt && !folder.parentId).sort((a, b) => a.order - b.order).map((folder) => <FolderTreeRow key={folder.id} folder={folder} folders={folders} documents={documents} filter={filter} depth={0} setFilter={setFilter} />)}
         </nav>

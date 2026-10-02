@@ -36,6 +36,79 @@ test('supports keyboard range selection and batch deletion in the map', async ({
   await expect(page.locator('.me-tpc')).toHaveCount(before - 2)
 })
 
+test('pans the whole map with the middle mouse button', async ({ page }) => {
+  await openMap(page)
+  const root = page.locator('.me-root .me-tpc').first()
+  const stage = page.locator('.mindmap-stage')
+  const before = await root.boundingBox()
+  const stageBox = await stage.boundingBox()
+  expect(before).not.toBeNull()
+  expect(stageBox).not.toBeNull()
+
+  await page.mouse.move(stageBox!.x + 45, stageBox!.y + 90)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(stageBox!.x + 165, stageBox!.y + 150, { steps: 8 })
+  await page.mouse.up({ button: 'middle' })
+
+  const after = await root.boundingBox()
+  expect(after).not.toBeNull()
+  expect(after!.x - before!.x).toBeGreaterThan(90)
+  expect(after!.y - before!.y).toBeGreaterThan(35)
+})
+
+test('moves and deletes multiple selected map topics as one group', async ({ page }) => {
+  await openMap(page)
+  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
+  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
+  const target = page.locator('.me-tpc', { hasText: '深度学习' }).first()
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+  await expect(page.getByRole('toolbar', { name: '主题操作' })).toContainText('已选 2 项')
+  await page.getByRole('button', { name: '移动到', exact: true }).click()
+  await page.getByRole('button', { name: '移动到 深度学习' }).click()
+
+  const firstBox = await first.boundingBox()
+  const secondBox = await second.boundingBox()
+  const targetBox = await target.boundingBox()
+  expect(firstBox).not.toBeNull()
+  expect(secondBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect(firstBox!.x).toBeGreaterThan(targetBox!.x + 70)
+  expect(secondBox!.x).toBeGreaterThan(targetBox!.x + 70)
+
+  await page.getByRole('button', { name: '删除已选 2 个主题' }).click()
+  await expect(page.locator('.me-tpc')).toHaveCount(9)
+})
+
+test('drags multiple selected map topics together', async ({ page }) => {
+  await openMap(page)
+  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
+  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
+  const target = page.locator('.me-tpc', { hasText: '深度学习' }).first()
+
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+  const from = await first.boundingBox()
+  const destination = await target.boundingBox()
+  expect(from).not.toBeNull()
+  expect(destination).not.toBeNull()
+  await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(destination!.x + destination!.width * .8, destination!.y + destination!.height / 2, { steps: 18 })
+  await page.waitForTimeout(250)
+  await page.mouse.up()
+
+  const firstBox = await first.boundingBox()
+  const secondBox = await second.boundingBox()
+  const targetBox = await target.boundingBox()
+  expect(firstBox).not.toBeNull()
+  expect(secondBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect(firstBox!.x).toBeGreaterThan(targetBox!.x + 70)
+  expect(secondBox!.x).toBeGreaterThan(targetBox!.x + 70)
+})
+
 test('creates summaries and relations directly from map selections', async ({ page }) => {
   await openMap(page)
   const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()

@@ -412,6 +412,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .folder-create { display: flex; align-items: center; margin: 2px 4px 7px; border: 1px solid #cbd5cd; border-radius: 7px; background: white; }
 .folder-create input { min-width: 0; flex: 1; padding: 7px 8px; border: 0; outline: 0; background: transparent; font-size: 11px; }
 .folder-create button { width: 25px; height: 25px; display: grid; place-items: center; border: 0; color: #819087; background: transparent; cursor: pointer; }
+.folder-create button.confirm { color: #326344; }
+.folder-create button:hover:not(:disabled) { border-radius: 5px; background: #eef3ef; }
+.folder-create button:disabled { opacity: .32; cursor: default; }
 .dropdown-label { padding: 5px 8px 4px; color: #99a19c; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .danger-item { color: #985151; }
 
