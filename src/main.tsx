@@ -7,8 +7,32 @@ import App from './App.tsx'
 import { useDocumentStore } from './stores/documentStore'
 import { useSaveStore } from './stores/saveStore'
 
-if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-  registerSW({ immediate: true })
+if (
+  (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+  && 'serviceWorker' in navigator
+) {
+  let reloadingForUpdate = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadingForUpdate) return
+    reloadingForUpdate = true
+    window.location.reload()
+  })
+
+  let activateUpdate: (reloadPage?: boolean) => Promise<void> = async () => {}
+  activateUpdate = registerSW({
+    immediate: true,
+    onNeedRefresh: () => { void activateUpdate(true) },
+    onRegisteredSW: (_serviceWorkerUrl, registration) => {
+      if (!registration) return
+      const checkForUpdate = () => { void registration.update() }
+      checkForUpdate()
+      window.addEventListener('focus', checkForUpdate)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate()
+      })
+      window.setInterval(checkForUpdate, 5 * 60 * 1000)
+    },
+  })
 }
 
 createRoot(document.getElementById('root')!).render(
