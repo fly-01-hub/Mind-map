@@ -20,10 +20,14 @@ const shortcutGroups = [
       ['Ctrl + Shift + L', '添加或取消待办'],
       ['Ctrl + Shift + K', '完成或取消完成'],
       ['Ctrl + Shift + ↑ / ↓', '同级主题上移或下移'],
+      ['Shift + ↑ / ↓', '向上或向下连续多选'],
+      ['Ctrl + A', '选择当前导图全部可见主题'],
       ['Ctrl + F', '搜索节点'],
       ['Ctrl + ]', '聚焦当前分支'],
       ['Ctrl + [', '返回上一级主题'],
       ['Alt + .', '折叠或展开下级'],
+      ['Ctrl + Alt + 1/2/3', '显示当前分支到指定层级'],
+      ['Ctrl + Alt + Shift + .', '折叠或展开全部分支'],
     ],
   },
   {
@@ -46,6 +50,7 @@ const shortcutGroups = [
       ['Ctrl + Shift + X', '添加或取消挖空'],
       ['Alt + L', '行内代码'],
       ['Alt + D/R/Y/G/B/P', '文字颜色'],
+      ['Alt + Enter', '为当前主题添加本地图片'],
     ],
   },
 ]
@@ -68,7 +73,7 @@ export function ShortcutHelpDialog({ open, onOpenChange }: { open: boolean; onOp
             </section>
             <section className="shortcut-feature">
               <FileText size={18} />
-              <div><strong>导图浏览</strong><span>导图中双击主题编辑；Shift + 点击或在空白处拖框可多选，按住鼠标中键平移画布。底部主题栏可快速添加同级、下级、待办、描述与连接。</span></div>
+              <div><strong>导图优先操作</strong><span>双击主题编辑；Shift + 点击、Shift + ↑/↓ 或空白处拖框可多选，按住鼠标中键平移。底部主题栏可直接添加主题、待办、描述、图片、概要与连接线。</span></div>
             </section>
           </div>
           <div className="shortcut-columns">

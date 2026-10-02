@@ -14,15 +14,16 @@ function Item({ icon, label, shortcut, onSelect, disabled }: { icon?: ReactNode;
   return <ContextMenu.Item className="context-item" onSelect={onSelect} disabled={disabled}>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}</ContextMenu.Item>
 }
 
-export function NodeContextMenu({ children, onCommand, isRoot, hasClipboard }: {
+export function NodeContextMenu({ children, onCommand, isRoot, hasClipboard, disabled }: {
   children: ReactNode
   onCommand: (command: NodeCommand) => void
   isRoot: boolean
   hasClipboard: boolean
+  disabled?: boolean
 }) {
   return (
     <ContextMenu.Root>
-      <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
+      <ContextMenu.Trigger asChild disabled={disabled}>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className="context-content" collisionPadding={12}>
           <Item label="插入同级主题" shortcut="Enter" onSelect={() => onCommand('sibling')} />

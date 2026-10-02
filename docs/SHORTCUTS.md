@@ -40,8 +40,16 @@
 - Tab：创建下级节点；Shift + Tab：提升当前节点
 - Shift + Enter：进入右侧描述编辑区
 - Escape：结束编辑
-- Shift + 点击主题：增减多选；从画布空白处拖动：框选主题
+- Shift + 点击主题、Shift + ↑/↓：连续多选；从画布空白处拖动：框选主题
+- Ctrl + A：选择当前导图全部可见主题
+- Ctrl + C/X/V/D：复制、剪切、粘贴或创建分支副本；多选时复制/剪切整组主题
+- Ctrl + Shift + L/K：添加待办、完成或取消完成；Ctrl + Shift + ↑/↓：同级主题移动
+- Alt/Ctrl + .：折叠当前主题；Ctrl + Shift + .：折叠同级主题；Ctrl + Alt + 1/2/3：显示当前分支到指定层级
+- Ctrl + B/I/U、Ctrl + Enter、Alt + D/R/Y/G/B/P：设置整主题样式；编辑时作用于选中的局部文字
+- Alt + L、Ctrl + Shift + X：编辑时把选中文字设为行内代码或挖空
+- Alt + Enter：给当前主题添加完全保存在本地的图片
 - 双击主题：按点击位置进入文字编辑；中键拖动：平移画布
+- 多选相邻同级主题后可创建概要；选择一个主题后点击“连接”，再点目标主题即可创建连接线
 - 输入法组合期间的 Enter 只确认候选词，不执行节点命令。代码同时检查 `KeyboardEvent.isComposing` 和 `compositionstart/compositionend`。
 
 ## 文件拖放

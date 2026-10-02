@@ -189,9 +189,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       version: Math.max(document.version, version) + 1, updatedAt: new Date().toISOString(),
     } : document),
   })),
-  commitTree: (root) => set((state) => updateActive(state, (document) => withRoot(document, root))),
+  commitTree: (root) => set((state) => updateActive(state, (document) => ({ ...withRoot(document, root), title: root.title }))),
   commitMap: (root, arrows, summaries) => set((state) => updateActive(state, (document) => ({
-    ...withRoot(document, root), arrows: structuredClone(arrows), summaries: structuredClone(summaries),
+    ...withRoot(document, root), title: root.title, arrows: structuredClone(arrows), summaries: structuredClone(summaries),
   }))),
   replaceFocusedTree: (subtree, focusRootId) => set((state) => updateActive(state, (document) =>
     withRoot(document, focusRootId ? replaceSubtree(document.root, subtree) : subtree))),

@@ -43,6 +43,33 @@ test('keeps a mouse-dragged partial selection inside a mind-map topic and delete
   await expect(editor).toHaveText('鱼觉')
 })
 
+test('formats a partial mind-map topic selection and preserves it across views', async ({ page }) => {
+  await page.goto('/map/research-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+
+  const topic = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  await topic.dblclick()
+  const editor = page.locator('#input-box[contenteditable]')
+  await editor.evaluate((element) => {
+    const text = element.firstChild
+    if (!(text instanceof Text)) throw new Error('Expected a text node')
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 2)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  })
+  await editor.press('Control+B')
+  await expect(editor.locator('strong, b')).toHaveText('鱼眼')
+  await page.locator('.mindmap-stage').click({ position: { x: 80, y: 100 } })
+
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await expect(page.locator('.outline-topic-input', { hasText: '鱼眼视觉' }).locator('strong')).toHaveText('鱼眼')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first().locator(':scope > .text strong')).toHaveText('鱼眼')
+})
+
 test('keeps a mouse-dragged partial selection inside an outline topic and deletes it', async ({ page }) => {
   await page.goto('/map/research-map')
   const editor = page.locator('.outline-topic-input', { hasText: '鱼眼视觉' }).first()

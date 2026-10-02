@@ -7,7 +7,7 @@ import MindElixir, {
 } from 'mind-elixir'
 import type { MapArrow, MapSummary, NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
 import { downloadBlob } from '../../services/export/download'
-import { plainTextFromRichText } from '../../utils/richText'
+import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
 
 interface EngineMetadata {
   createdAt: string
@@ -62,9 +62,12 @@ const mapThemes: Record<'paper' | 'ocean' | 'warm' | 'mono', Theme<EngineMetadat
 
 export class MindMapEngineAdapter {
   private engine: MindElixir<EngineMetadata>
+  private events: AdapterEvents
   private disposed = false
+  private refreshing = false
 
   constructor(element: HTMLElement, events: AdapterEvents) {
+    this.events = events
     this.engine = new MindElixir<EngineMetadata>({
       el: element,
       direction: MindElixir.RIGHT,
@@ -79,9 +82,15 @@ export class MindMapEngineAdapter {
       theme: mapThemes.paper,
     })
 
-    this.engine.bus.addListener('selectNodes', () => events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id)))
-    this.engine.bus.addListener('selectNewNode', (node) => events.onSelectionChange([node.id]))
-    this.engine.bus.addListener('unselectNodes', () => events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id)))
+    this.engine.bus.addListener('selectNodes', () => {
+      if (!this.refreshing) events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id))
+    })
+    this.engine.bus.addListener('selectNewNode', (node) => {
+      if (!this.refreshing) events.onSelectionChange([node.id])
+    })
+    this.engine.bus.addListener('unselectNodes', () => {
+      if (!this.refreshing) events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id))
+    })
     this.engine.bus.addListener('operation', (operation) => {
       if (this.disposed || operation.name === 'beginEdit') return
       const map = this.getMap()
@@ -97,12 +106,23 @@ export class MindMapEngineAdapter {
 
   async init(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
     await this.engine.init(this.toEngineData(root, arrows, summaries))
+    this.applyRichText()
+    requestAnimationFrame(() => this.applyRichText())
     this.engine.toCenter()
   }
 
   render(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
     if (this.disposed) return
-    this.engine.refresh(this.toEngineData(root, arrows, summaries))
+    const selection = this.engine.currentNodes.map((node) => node.nodeObj.id)
+    this.refreshing = true
+    try {
+      this.engine.refresh(this.toEngineData(root, arrows, summaries))
+      this.applyRichText()
+      requestAnimationFrame(() => this.applyRichText())
+      if (selection.length) this.setSelections(selection)
+    } finally {
+      this.refreshing = false
+    }
   }
 
   destroy() {
@@ -114,10 +134,47 @@ export class MindMapEngineAdapter {
     const element = this.safeFind(id)
     if (!element) return
     void this.engine.beginEdit(element).then(() => {
-      if (!caretPoint) return
+      const input = this.engine.nodes.querySelector<HTMLElement>('#input-box')
+      if (!input) return
+      const metadata = element.nodeObj.metadata ?? defaultMetadata()
+      const originalRichText = metadata.richText
+      let cancelled = false
+      element.nodeObj.metadata = metadata
+      input.contentEditable = 'true'
+      input.innerHTML = originalRichText ?? richTextFromPlain(element.nodeObj.topic)
+      const syncRichText = () => {
+        metadata.richText = compactRichText(sanitizeRichText(input.innerHTML), input.innerText.trim())
+      }
+      input.addEventListener('input', syncRichText)
+      input.addEventListener('keyup', syncRichText)
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') cancelled = true
+      }, { capture: true })
+      input.addEventListener('blur', () => {
+        if (cancelled) metadata.richText = originalRichText
+        else {
+          syncRichText()
+          const plainText = input.innerText.trim()
+          if (metadata.richText !== originalRichText && plainText === element.nodeObj.topic) {
+            queueMicrotask(() => {
+              if (this.disposed) return
+              const map = this.getMap()
+              this.events.onMapChange(map.root, map.arrows, map.summaries, {
+                name: 'finishEdit', target: element.nodeObj, origin: element.nodeObj.topic,
+              })
+            })
+          }
+        }
+      }, { capture: true, once: true })
+      if (!caretPoint) {
+        const range = document.createRange()
+        range.selectNodeContents(input)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        return
+      }
       requestAnimationFrame(() => {
-        const input = this.engine.nodes.querySelector<HTMLElement>('#input-box')
-        if (!input) return
         input.focus()
         const caretDocument = document as Document & {
           caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
@@ -270,6 +327,16 @@ export class MindMapEngineAdapter {
 
   private safeFind(id: string): Topic<EngineMetadata> | undefined {
     try { return this.engine.findEle(id) } catch { return undefined }
+  }
+
+  private applyRichText() {
+    if (this.disposed) return
+    this.engine.nodes.querySelectorAll<HTMLElement>('.me-tpc').forEach((topic) => {
+      const element = topic as Topic<EngineMetadata>
+      const richText = element.nodeObj?.metadata?.richText
+      const text = topic.querySelector<HTMLElement>(':scope > .text')
+      if (richText && text) text.innerHTML = sanitizeRichText(richText)
+    })
   }
 
   private toEngineData(root: NodeData, arrows: MapArrow[], summaries: MapSummary[]): MindElixirData<EngineMetadata> {
