@@ -65,7 +65,8 @@ export function MapEditorPage() {
   const composingRef = useRef(false)
   const pendingEditRef = useRef<string | undefined>(undefined)
   const pendingRevealRef = useRef<string | undefined>(undefined)
-  const panPointerRef = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined)
+  const panPointerRef = useRef<{ pointerId: number; x: number; y: number; viaSpace: boolean } | undefined>(undefined)
+  const boxSelectionGestureRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | undefined>(undefined)
   const stopPanRef = useRef<(() => void) | undefined>(undefined)
   const spacePressedRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -157,7 +158,9 @@ export function MapEditorPage() {
 
   useEffect(() => {
     const releaseSpace = (event: KeyboardEvent) => {
-      if (event.code === 'Space') spacePressedRef.current = false
+      if (event.code !== 'Space') return
+      spacePressedRef.current = false
+      if (panPointerRef.current?.viaSpace) stopPanRef.current?.()
     }
     const stopInteraction = () => {
       spacePressedRef.current = false
@@ -377,39 +380,8 @@ export function MapEditorPage() {
     return () => window.removeEventListener('keydown', handleWindowShortcut)
   }, [command, document, editorView, selectedNodeId, setFocusRoot, setInspectorOpen, setSelectedNode])
 
-  const attachFiles = async (files: FileList | File[], nodeId: string) => {
-    if (!document || readOnly || presentationMode) return
-    const store = useDocumentStore.getState()
-    // A file can be dropped immediately after a direct route opens, before the route effect
-    // has marked this document active. Make the command self-contained instead of timing-dependent.
-    if (store.activeDocumentId !== document.id) store.openDocument(document.id)
-    const target = findNode(store.documents.find((item) => item.id === document.id)?.root ?? document.root, nodeId)
-    if (!target) return
-    const attachments = []
-    let openedNodeId = nodeId
-    for (const file of Array.from(files)) {
-      if (isPdfFile(file)) {
-        const paperNodeId = useDocumentStore.getState().insertChild(nodeId)
-        if (!paperNodeId) continue
-        useDocumentStore.getState().updateNode(paperNodeId, { title: titleFromPdfFileName(file.name) })
-        try {
-          await usePaperStore.getState().uploadAndLink(file, document.id, paperNodeId, userId)
-          openedNodeId = paperNodeId
-        } catch {
-          useDocumentStore.getState().remove(paperNodeId)
-          window.alert(`“${file.name}”导入失败，请确认它是有效的 PDF 文件。`)
-        }
-      }
-      else attachments.push(await attachmentRepository.save(document.id, nodeId, file))
-    }
-    if (attachments.length) useDocumentStore.getState().updateNode(nodeId, { attachments: [...target.attachments, ...attachments] })
-    setSelectedNode(openedNodeId)
-    setInspectorOpen(true)
-  }
-
-  const attachImage = async (file?: File) => {
-    const nodeId = useSelectionStore.getState().selectedNodeId
-    if (!file || !file.type.startsWith('image/') || !nodeId || readOnly || presentationMode) return
+  async function attachImageToNode(file: File, nodeId: string) {
+    if (!document || !file.type.startsWith('image/') || readOnly || presentationMode) return false
     const url = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('图片读取失败'))
@@ -426,6 +398,52 @@ export function MapEditorPage() {
       image.src = url
     })
     useDocumentStore.getState().updateNode(nodeId, { image: { url, ...size } })
+    setSelectedNode(nodeId)
+    return true
+  }
+
+  const attachFiles = async (files: FileList | File[], nodeId: string) => {
+    if (!document || readOnly || presentationMode) return
+    const store = useDocumentStore.getState()
+    // A file can be dropped immediately after a direct route opens, before the route effect
+    // has marked this document active. Make the command self-contained instead of timing-dependent.
+    if (store.activeDocumentId !== document.id) store.openDocument(document.id)
+    const target = findNode(store.documents.find((item) => item.id === document.id)?.root ?? document.root, nodeId)
+    if (!target) return
+    const attachments = []
+    let openedNodeId = nodeId
+    let insertedImage = false
+    let shouldOpenInspector = false
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/') && !insertedImage) {
+        insertedImage = await attachImageToNode(file, nodeId)
+      }
+      else if (isPdfFile(file)) {
+        const paperNodeId = useDocumentStore.getState().insertChild(nodeId)
+        if (!paperNodeId) continue
+        useDocumentStore.getState().updateNode(paperNodeId, { title: titleFromPdfFileName(file.name) })
+        try {
+          await usePaperStore.getState().uploadAndLink(file, document.id, paperNodeId, userId)
+          openedNodeId = paperNodeId
+          shouldOpenInspector = true
+        } catch {
+          useDocumentStore.getState().remove(paperNodeId)
+          window.alert(`“${file.name}”导入失败，请确认它是有效的 PDF 文件。`)
+        }
+      }
+      else {
+        attachments.push(await attachmentRepository.save(document.id, nodeId, file))
+        shouldOpenInspector = true
+      }
+    }
+    if (attachments.length) useDocumentStore.getState().updateNode(nodeId, { attachments: [...target.attachments, ...attachments] })
+    setSelectedNode(openedNodeId)
+    if (shouldOpenInspector) setInspectorOpen(true)
+  }
+
+  const attachImage = async (file?: File) => {
+    const nodeId = useSelectionStore.getState().selectedNodeId
+    if (file && nodeId) await attachImageToNode(file, nodeId)
   }
 
   const updateSelected = (patch: Partial<NodeData> | ((node: NodeData) => Partial<NodeData>)) => {
@@ -457,12 +475,25 @@ export function MapEditorPage() {
 
   const moveSelectedSibling = (direction: -1 | 1) => {
     if (!document || !selectedNodeId) return
-    const match = findParent(document.root, selectedNodeId)
-    if (!match) return
-    const target = match.parent.children[match.index + direction]
+    const ids = useSelectionStore.getState().selectedNodeIds
+    const matches = ids.map((nodeId) => ({ nodeId, match: findParent(document.root, nodeId) })).filter((item) => item.match)
+    if (!matches.length) return
+    const parentId = matches[0].match!.parent.id
+    if (matches.some((item) => item.match!.parent.id !== parentId)) return
+    const parent = matches[0].match!.parent
+    const selected = new Set(ids)
+    const indexes = matches.map((item) => item.match!.index).sort((a, b) => a - b)
+    let targetIndex = direction < 0 ? indexes[0] - 1 : indexes.at(-1)! + 1
+    while (targetIndex >= 0 && targetIndex < parent.children.length && selected.has(parent.children[targetIndex].id)) targetIndex += direction
+    const target = parent.children[targetIndex]
     if (!target) return
-    useDocumentStore.getState().moveRelative(selectedNodeId, target.id, direction < 0 ? 'before' : 'after')
-    setSelectedNode(selectedNodeId)
+    if (ids.length > 1) {
+      useDocumentStore.getState().moveManyRelative(ids, target.id, direction < 0 ? 'before' : 'after')
+      setSelectedNodes(ids, selectedNodeId)
+    } else {
+      useDocumentStore.getState().moveRelative(selectedNodeId, target.id, direction < 0 ? 'before' : 'after')
+      setSelectedNode(selectedNodeId)
+    }
   }
 
   const showBranchDepth = (levels: number) => {
@@ -593,7 +624,8 @@ export function MapEditorPage() {
     if (mod && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAllVisible(); return }
     if (mod && event.key.toLowerCase() === 'c') { event.preventDefault(); if (selectedNodeIds.length > 1) useDocumentStore.getState().copyMany(selectedNodeIds); else command('copy'); return }
     if (mod && event.key.toLowerCase() === 'x') { event.preventDefault(); if (selectedNodeIds.length > 1) useDocumentStore.getState().cutMany(selectedNodeIds); else command('cut'); return }
-    if (mod && event.key.toLowerCase() === 'v') { event.preventDefault(); command('paste'); return }
+    // Ctrl/Cmd+V is handled by onPasteCapture so system clipboard images and
+    // the app's copied topic branches can share the native paste path.
     if (mod && event.key.toLowerCase() === 'd') { event.preventDefault(); command('duplicate'); return }
     if (mod && event.shiftKey && event.key.toLowerCase() === 'l') { event.preventDefault(); updateSelected((node) => ({ taskStatus: node.taskStatus === 'none' ? 'todo' : 'none' })); return }
     if (mod && event.shiftKey && event.key.toLowerCase() === 'k') { event.preventDefault(); updateSelected((node) => ({ taskStatus: node.taskStatus === 'done' ? 'todo' : 'done' })); return }
@@ -728,6 +760,13 @@ export function MapEditorPage() {
             const target = event.target as HTMLElement
             if (!(event.target as HTMLElement).isContentEditable) event.currentTarget.focus({ preventScroll: true })
             const anchor = adapterRef.current?.resolveNode(target)
+            const blankCanvasPress = event.button === 0
+              && !anchor
+              && Boolean(target.closest('.mindmap-canvas'))
+              && !target.closest('button, input, textarea, select, a, [contenteditable="true"]')
+            boxSelectionGestureRef.current = blankCanvasPress
+              ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+              : undefined
             if (event.button === 0 && event.shiftKey && anchor) {
               event.preventDefault()
               event.stopPropagation()
@@ -739,11 +778,12 @@ export function MapEditorPage() {
               return
             }
             if (event.button === 1 || (event.button === 0 && spacePressedRef.current)) {
+              const viaSpace = event.button === 0
               event.preventDefault()
               event.stopPropagation()
               event.nativeEvent.stopImmediatePropagation()
               stopPanRef.current?.()
-              panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+              panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, viaSpace }
               setIsPanning(true)
               const move = (pointerEvent: PointerEvent) => {
                 const pan = panPointerRef.current
@@ -757,6 +797,7 @@ export function MapEditorPage() {
                 const pan = panPointerRef.current
                 if (pointerEvent && pan?.pointerId !== pointerEvent.pointerId) return
                 panPointerRef.current = undefined
+                if (pan?.viaSpace) spacePressedRef.current = false
                 setIsPanning(false)
                 window.removeEventListener('pointermove', move, true)
                 window.removeEventListener('pointerup', stop, true)
@@ -767,6 +808,23 @@ export function MapEditorPage() {
               window.addEventListener('pointermove', move, { capture: true, passive: false })
               window.addEventListener('pointerup', stop, true)
               window.addEventListener('pointercancel', stop, true)
+              return
+            }
+            if (
+              event.button === 0
+              && !anchor
+              && target.closest('.mindmap-canvas')
+              && !target.classList.contains('map-container')
+              && !target.closest('button, input, textarea, select, a, [contenteditable="true"]')
+            ) {
+              // Transparent connector/SVG layers are visually empty canvas,
+              // but Mind Elixir normally refuses to begin its marquee there.
+              // Forward the press to the actual canvas so box selection works
+              // consistently anywhere that looks blank to the user.
+              event.preventDefault()
+              event.stopPropagation()
+              event.nativeEvent.stopImmediatePropagation()
+              adapterRef.current?.beginBoxSelection(event.nativeEvent)
               return
             }
           }}
@@ -782,6 +840,28 @@ export function MapEditorPage() {
           onKeyUpCapture={(event) => { if (event.code === 'Space') spacePressedRef.current = false }}
           onCompositionStartCapture={() => { composingRef.current = true }}
           onCompositionEndCapture={() => { composingRef.current = false }}
+          onPasteCapture={(event) => {
+            if (readOnly || presentationMode) return
+            const image = [...event.clipboardData.files].find((file) => file.type.startsWith('image/'))
+              ?? [...event.clipboardData.items]
+                .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+                .map((item) => item.getAsFile())
+                .find((file): file is File => Boolean(file))
+            if (!image) {
+              const target = event.target as HTMLElement
+              if (!target.isContentEditable && !target.closest('[contenteditable="true"]') && useDocumentStore.getState().clipboard) {
+                event.preventDefault()
+                event.stopPropagation()
+                command('paste')
+              }
+              return
+            }
+            const anchor = adapterRef.current?.resolveNode(event.target)
+            const targetId = anchor?.id ?? useSelectionStore.getState().selectedNodeId ?? document.root.id
+            event.preventDefault()
+            event.stopPropagation()
+            void attachImageToNode(image, targetId)
+          }}
           onDragEnterCapture={(event) => {
             if (readOnly || presentationMode) return
             if (!event.dataTransfer.types.includes('Files')) return
@@ -845,6 +925,11 @@ export function MapEditorPage() {
             }
           }}
           onPointerMove={(event) => {
+            const boxGesture = boxSelectionGestureRef.current
+            if (boxGesture?.pointerId === event.pointerId && !boxGesture.moved) {
+              const moved = Math.abs(event.clientX - boxGesture.x) > 4 || Math.abs(event.clientY - boxGesture.y) > 4
+              if (moved) boxSelectionGestureRef.current = { ...boxGesture, moved: true }
+            }
             const anchor = adapterRef.current?.resolveNode(event.target)
             setNodeAnchor(anchor ?? (selectedNodeId ? adapterRef.current?.anchorFor(selectedNodeId) : undefined))
           }}
@@ -854,6 +939,16 @@ export function MapEditorPage() {
             // the user can delete it with Backspace.
             if ((event.target as HTMLElement).closest('#input-box[contenteditable]')) return
             const anchor = adapterRef.current?.resolveNode(event.target)
+            const boxGesture = boxSelectionGestureRef.current
+            boxSelectionGestureRef.current = undefined
+            if (!anchor && boxGesture?.moved) {
+              // Browsers emit a click after a completed marquee drag. That
+              // synthetic blank-canvas click must not immediately clear the
+              // group the marquee just selected.
+              event.preventDefault()
+              event.stopPropagation()
+              return
+            }
             if (relationSourceId && anchor) {
               event.preventDefault()
               event.stopPropagation()
@@ -882,7 +977,7 @@ export function MapEditorPage() {
           <div ref={canvasRef} className="mindmap-canvas" data-testid="mindmap-canvas" />
           {fileDropTargetId && <div className="file-drop-hint">
             <FileUp size={18} />
-            <span>松开以导入；PDF 将成为“{findNode(document.root, fileDropTargetId)?.title ?? document.root.title}”的子节点</span>
+            <span>松开以插入“{findNode(document.root, fileDropTargetId)?.title ?? document.root.title}”：图片显示在主题中，PDF 生成子主题</span>
           </div>}
           {nodeAnchor && !readOnly && !presentationMode && <div className="node-quick-actions" style={{ left: nodeAnchor.left + nodeAnchor.width + 7, top: nodeAnchor.top + nodeAnchor.height / 2 }}>
             {nodeAnchor.hasChildren && <button className="node-mini-button collapse-button" aria-label={nodeAnchor.collapsed ? '展开下级' : '折叠下级'} onClick={() => {

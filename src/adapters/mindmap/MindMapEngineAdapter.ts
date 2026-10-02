@@ -268,7 +268,45 @@ export class MindMapEngineAdapter {
     return this.engine.scaleVal
   }
   center() { this.engine.toCenter() }
-  panBy(x: number, y: number) { this.engine.move(x, y) }
+
+  beginBoxSelection(event: PointerEvent) {
+    // Mind Elixir starts its marquee only when the original pointer target is
+    // exactly `.map-container`. Connector SVGs and other transparent map
+    // layers can cover visually blank canvas, so replay the pointer-down on
+    // the real container while the physical pointer is still active.
+    const forwarded = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      isPrimary: event.isPrimary,
+      button: 0,
+      buttons: 1,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+    })
+    this.engine.container.dispatchEvent(forwarded)
+    // The engine and the selection plug-in both subscribe to pointerdown. In
+    // some browsers the plug-in observes the replay before the engine has set
+    // BoxSelect state, so explicitly trigger once after state initialization.
+    this.engine.selection.trigger(forwarded)
+  }
+
+  panBy(x: number, y: number) {
+    // Mind Elixir deliberately clamps panning once the map's bounds reach the
+    // viewport centre. Mubu-style canvas navigation is free-form, so move the
+    // transformed map directly and keep the current zoom unchanged.
+    const transform = getComputedStyle(this.engine.map).transform
+    const matrix = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform) : new DOMMatrixReadOnly()
+    this.engine.map.style.transform = `translate3d(${matrix.m41 + x}px, ${matrix.m42 + y}px, 0) scale(${this.engine.scaleVal})`
+  }
 
   getScale() { return this.engine.scaleVal }
 
