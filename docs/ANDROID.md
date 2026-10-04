@@ -2,6 +2,8 @@
 
 核验日期：2026-10-04。源码/安卓包为 1.7.0，本机已安装 Windows 程序仍为 1.6.0；本轮未重装 Windows、未重新部署旧公网网页。
 
+源码功能提交 [4ef654b](https://github.com/fly-01-hub/Mind-map/commit/4ef654b850fca4c5e03daab2d4b00ebb4d30fbce) 已推送 main，远端与本地核对一致；本交付记录随后更新。APK 仅在本地 release，没有创建远端商店/GitHub 安装包发布。
+
 ## 安装与迁移
 
 本地安装包：`release/ResearchMind-1.7.0-android.apk`，4,666,745 字节（约 4.45 MiB）。SHA-256：`B963598AF793E7AECCACDF8D5A42D603B3E799066D2BEA55D0F19D6D6674BE88`。

@@ -122,6 +122,8 @@ npx playwright install chromium
 
 ## 当前边界
 
+2026-10-04 / 1.7.0：完整备份和文件夹恢复核验通过；新增安卓 APK，最终通过 49 项单元、60 项原有浏览器和 5 项安卓专项测试，以及类型检查/lint/构建/签名/资源核验。平板截图检查修正了 PDF 工具栏挤压。没有连接实际平板，系统文件选择器和软键盘仍需真机确认。功能提交 [4ef654b](https://github.com/fly-01-hub/Mind-map/commit/4ef654b850fca4c5e03daab2d4b00ebb4d30fbce) 已成功推送 main 并核对远端；交付说明随后单独提交。APK 留在本地 release，普通 push 不上传安装包、资料备份或密钥。
+
 无账号/云同步/网盘 API、OCR、真实 AI、PDF 批注写回、连续多页阅读、区域边缘调整把手或完整手机编辑。格式交换不保证全部字段无损：OPML/FreeMind 导入主要读结构，XMind 只支持现代格式首个 sheet；Markdown/PNG/打印 PDF 不能替代完整备份。更多差异见 [已知限制](docs/KNOWN_ISSUES.md) 和 [接手说明](redme.txt)。
 
 ## 目录

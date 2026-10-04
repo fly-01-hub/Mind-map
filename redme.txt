@@ -44,10 +44,10 @@ ResearchMind / 枝间 —— 最新功能、操作逻辑与 AI 接手说明
    这是本机当前路径，不是所有电脑的固定安装目录；NSIS 允许选择安装目录。
 4. 源码改好 ≠ dist 已重新构建 ≠ 安装包已重打 ≠ 已安装应用已升级 ≠ 旧公网网页已部署。
    Electron 加载安装包里的 dist，不直接加载当前工作目录源码；网页开发版运行当前源码。
-5. 本轮开始时 git HEAD 为 c14b49d（fix: keep installed web app on the latest build）；新版 PDF 工作流、双向链接和安卓代码原先尚未提交。
-   用户现已明确授权将当前项目提交并推送；接手时用 git status/git log 和远端 main 实际核验当前提交，不把历史 HEAD 当作最新版。
+5. 本轮开始时 git HEAD 为 c14b49d；按用户授权，功能提交 4ef654b（feat: add offline Android app, wiki links and complete backup verification）已在 2026-10-04 成功推送 main，包含新版 PDF 工作流、双向链接和安卓代码。
+   已核对远端 main 与本地功能提交一致；本记录随后单独提交。接手时仍用 git status/git log 和远端 main 核验当前 HEAD，不把历史提交号当作永远的最新版。
    Git remote origin：https://github.com/fly-01-hub/Mind-map.git。
-   本轮已查询远端 main，开始时为 c14b49d；完成提交推送后应再次验证远端提交与本地 HEAD 相同。不强推，不上传用户资料、备份或签名密钥。
+   本轮未强推，未上传用户资料、备份、APK 或签名密钥；本地 APK 和安装记录保存在被忽略的 release 中。源码 push 不等于创建远端 APK 发布或安装到用户平板。
 6. release、dist、node_modules、测试输出和 .vercel 已被 Git 忽略。安装包/个人资料备份不会因普通 git push 自动上传。
 
 三、知识库与文档管理
