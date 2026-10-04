@@ -3,10 +3,10 @@ import { Download, HardDrive, RotateCcw, ShieldCheck, Upload, X } from 'lucide-r
 import { useRef, useState } from 'react'
 import { createLocalBackup, restoreLocalBackup, saveBackupFile } from '../../services/backup/localBackupService'
 import { flushLocalPersistence } from '../../services/persistence/localPersistence'
+import { isAndroidApp } from '../../services/platform/androidFiles'
 
 export function BackupDialog() {
-  const isDesktopApp = window.location.protocol === 'app:'
-  const storageLocation = isDesktopApp ? '此电脑应用' : '当前浏览器'
+  const storageLocation = isAndroidApp() ? '此设备应用' : window.location.protocol === 'app:' ? '此电脑应用' : '当前浏览器'
   const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)

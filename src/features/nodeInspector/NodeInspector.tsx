@@ -15,6 +15,7 @@ import { usePaperStore } from '../../stores/paperStore'
 import { useUserStore } from '../../stores/userStore'
 import type { Attachment, NodeData, TaskStatus } from '../../types/mindmap'
 import { AttachmentViewer } from './AttachmentViewer'
+import { rehypeWikiLinks } from '../documentLinks/rehypeWikiLinks'
 import 'katex/dist/katex.min.css'
 
 const colors = ['#ffffff', '#edf3ee', '#eef1f5', '#f6f0e8', '#f3ebef', '#f5eeee']
@@ -42,7 +43,7 @@ function attachmentIcon(attachment: Attachment) {
   return <File size={15} />
 }
 
-export function NodeInspector({ node, documentId, close, focusNoteRequest }: { node?: NodeData; documentId: string; close: () => void; focusNoteRequest?: { nodeId: string; nonce: number } }) {
+export function NodeInspector({ node, documentId, close, focusNoteRequest, onOpenPaper, onOpenWikiLink }: { node?: NodeData; documentId: string; close: () => void; focusNoteRequest?: { nodeId: string; nonce: number }; onOpenPaper?: (paperId: string, annotationId?: string) => void; onOpenWikiLink?: (name: string) => void }) {
   const updateNode = useDocumentStore((state) => state.updateNode)
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -170,7 +171,13 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest }: { n
 
         <section className="inspector-block">
           <div className="inspector-label-row"><label htmlFor="node-note">Markdown 笔记</label><button className="preview-toggle" onClick={() => setPreview((value) => !value)}>{preview ? '编辑' : '预览'}</button></div>
-          {preview ? <div className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{note || '*暂无笔记*'}</ReactMarkdown></div> : <textarea ref={noteInputRef} id="node-note" className="inspector-input note-textarea" rows={7} value={note} onChange={(event) => setNote(event.target.value)} onBlur={() => { if (note !== node.note) patch({ note }) }} placeholder="记录摘要、想法或引用…" />}
+          {preview ? <div className="markdown-preview" onDoubleClick={(event) => {
+            const name = (event.target as HTMLElement).closest<HTMLElement>('[data-wiki-name]')?.dataset.wikiName
+            if (name) { event.preventDefault(); onOpenWikiLink?.(name) }
+          }} onKeyDown={(event) => {
+            const name = (event.target as HTMLElement).closest<HTMLElement>('[data-wiki-name]')?.dataset.wikiName
+            if (name && event.key === 'Enter') { event.preventDefault(); onOpenWikiLink?.(name) }
+          }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex, rehypeWikiLinks]}>{note || '*暂无笔记*'}</ReactMarkdown></div> : <textarea ref={noteInputRef} id="node-note" className="inspector-input note-textarea" rows={7} value={note} onChange={(event) => setNote(event.target.value)} onBlur={() => { if (note !== node.note) patch({ note }) }} placeholder="记录摘要、想法或引用…" />}
         </section>
 
         <section className="inspector-block compact-block">
@@ -202,6 +209,7 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest }: { n
 
         {paperSources.length > 0 && <section className="inspector-block paper-sources-block">
           <label><Quote size={12} />论文来源 · {paperSources.length}</label>
+          {onOpenPaper && <button className="preview-toggle" onClick={() => onOpenPaper(paperSources[0].paper.id, paperSources[0].annotation.id)}>在导图旁定位原文</button>}
           <div className="paper-source-list">{paperSources.map(({ relation, annotation, paper }) => <button key={relation.id} onClick={() => navigate(`/paper/${paper.id}?documentId=${encodeURIComponent(documentId)}&nodeId=${encodeURIComponent(node.id)}&page=${annotation.pageNumber}&annotationId=${encodeURIComponent(annotation.id)}`)} aria-label={`打开来源 ${paper.title} 第 ${annotation.pageNumber} 页`}>
             <span><strong>{paper.title}</strong><small>第 {annotation.pageNumber} 页 · 点击定位原文</small></span>
             <blockquote>{annotation.selectedText}</blockquote>

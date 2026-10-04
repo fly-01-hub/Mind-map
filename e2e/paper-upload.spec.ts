@@ -29,6 +29,8 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
 
   await page.reload()
   await page.locator('.me-tpc', { hasText: '深度学习' }).first().click()
+  await expect(page.locator('.embedded-reader')).toBeVisible()
+  await page.locator('.embedded-reader').getByRole('button', { name: '返回思维导图', exact: true }).click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await expect(page.getByText('Attention Is All You Need', { exact: true })).toBeVisible()
   expect(errors).toEqual([])
@@ -50,6 +52,6 @@ test('creates a visible paper node when a PDF is dropped onto a topic', async ({
   }, bytes)
 
   await expect(page.locator('.me-tpc', { hasText: 'Dropped Research Paper' })).toBeVisible()
-  await expect(page.getByText('文献 · 1', { exact: true })).toBeVisible()
-  await expect(page.getByText('Dropped Research Paper', { exact: true }).last()).toBeVisible()
+  await expect(page.locator('.embedded-reader')).toBeVisible()
+  await expect(page.locator('.embedded-reader .paper-reader-title strong')).toHaveText('Dropped Research Paper')
 })

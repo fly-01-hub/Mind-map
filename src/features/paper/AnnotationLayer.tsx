@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import type { PaperAnnotation } from '../../types/annotation'
 
 export function AnnotationLayer({ annotations, activeAnnotationId }: { annotations: PaperAnnotation[]; activeAnnotationId?: string }) {
@@ -17,11 +17,11 @@ export function AnnotationLayer({ annotations, activeAnnotationId }: { annotatio
           key={`${annotation.id}-${index}`}
           ref={annotation.id === activeAnnotationId && index === 0 ? activeMarkRef : undefined}
           data-annotation-id={annotation.id}
-          className={`paper-annotation-mark ${annotation.annotationType}${annotation.id === activeAnnotationId ? ' target' : ''}`}
+          className={`paper-annotation-mark ${annotation.annotationType}${annotation.areaStyle === 'highlight' ? ' region-highlight' : ''}${annotation.id === activeAnnotationId ? ' target' : ''}`} data-color={annotation.color ?? 'yellow'}
           style={{
-            left: `${rect.x * 100}%`, top: `${rect.y * 100}%`,
-            width: `${rect.width * 100}%`, height: `${rect.height * 100}%`,
-          }}
+            left: `${rect.x * 100}%`, top: `${(rect.y + (annotation.annotationType === 'area' ? 0 : rect.height * .08)) * 100}%`,
+            width: `${rect.width * 100}%`, height: `${rect.height * (annotation.annotationType === 'area' ? 1 : .86) * 100}%`,
+          } as CSSProperties}
         />
       )))}
     </div>

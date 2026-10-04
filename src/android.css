@@ -1,0 +1,39 @@
+/* These overrides never affect the installed Windows app or ordinary browser layouts. */
+html[data-platform="android"], html[data-platform="android"] body, html[data-platform="android"] #root {
+  min-width: 0;
+}
+html[data-platform="android"] .editor-shell, html[data-platform="android"] .library-shell { height: 100dvh; }
+html[data-platform="android"] .editor-toolbar { overflow-x: auto; overscroll-behavior-x: contain; }
+html[data-platform="android"] .editor-toolbar > * { flex-shrink: 0; }
+html[data-platform="android"] .folder-more { opacity: 1; }
+html[data-platform="android"] .outline-document { width: min(820px, calc(100% - 24px)); padding: 30px 12px 100px; }
+html[data-platform="android"] .map-selection-toolbar { max-width: calc(100vw - 24px); overflow-x: auto; }
+html[data-platform="android"] .canvas-onboarding-tip { display: none; }
+html[data-platform="android"] .document-backlinks.is-overlay { max-width: calc(100% - 24px); }
+html[data-platform="android"] .paper-reader-page { height: 100dvh; }
+html[data-platform="android"] .paper-reader-toolbar { display: flex; height: 58px; overflow-x: auto; overscroll-behavior-x: contain; }
+html[data-platform="android"] .paper-reader-toolbar > * { flex-shrink: 0; }
+html[data-platform="android"] .paper-reader-title { flex: 1 0 130px; }
+html[data-platform="android"] .paper-reader-toolbar .paper-search-toggle { width: auto; padding: 0 10px; font-size: 11px; white-space: nowrap; }
+html[data-platform="android"] .paper-reader-toolbar .paper-zoom-controls { display: flex; }
+@media (max-width: 1100px) {
+  html[data-platform="android"] .library-shell { grid-template-columns: 180px minmax(0, 1fr); }
+  html[data-platform="android"] .library-sidebar { padding-left: 8px; padding-right: 8px; }
+  html[data-platform="android"] .library-main { padding: 28px 22px 50px; }
+  html[data-platform="android"] .library-header { align-items: flex-start; flex-wrap: wrap; gap: 18px; }
+  html[data-platform="android"] .library-header-actions { flex-wrap: wrap; }
+  html[data-platform="android"] .library-overview { flex-wrap: wrap; }
+  html[data-platform="android"] .library-overview .library-overview-tip { display: none; }
+  html[data-platform="android"] .document-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  html[data-platform="android"] .editor-shell.with-inspector { grid-template-columns: minmax(0, 1fr) 300px !important; }
+  html[data-platform="android"] .node-inspector { width: auto; min-width: 0; }
+  html[data-platform="android"] .search-field { width: min(360px, calc(100% - 84px)); }
+}
+@media (max-width: 700px) {
+  html[data-platform="android"] .library-shell { grid-template-columns: 140px minmax(0, 1fr); }
+  html[data-platform="android"] .library-main { padding: 22px 12px 40px; }
+  html[data-platform="android"] .library-header h1 { font-size: 23px; }
+  html[data-platform="android"] .document-row { grid-template-columns: 26px minmax(0, 1fr) 28px; }
+  html[data-platform="android"] .document-row > time, html[data-platform="android"] .document-row > .folder-pill { display: none; }
+  html[data-platform="android"] .document-list-head { display: none; }
+}

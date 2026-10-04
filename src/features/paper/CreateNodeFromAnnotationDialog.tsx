@@ -27,7 +27,7 @@ export function CreateNodeFromAnnotationDialog({ paper, annotation, defaultDocum
   const [documentId, setDocumentId] = useState(initialDocument?.id ?? '')
   const [parentNodeId, setParentNodeId] = useState(initialNodes.some((node) => node.id === defaultNodeId) ? defaultNodeId! : initialNodes[0]?.id ?? '')
   const [title, setTitle] = useState(annotation.selectedText.replace(/\s+/g, ' ').trim().slice(0, 100))
-  const [note, setNote] = useState(annotation.content)
+  const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const targetDocument = documents.find((document) => document.id === documentId)
@@ -58,6 +58,7 @@ export function CreateNodeFromAnnotationDialog({ paper, annotation, defaultDocum
           <header><div><p className="eyebrow">Paper to mind map</p><Dialog.Title>生成思维导图节点</Dialog.Title></div><Dialog.Close asChild><button className="icon-button" aria-label="关闭"><X size={18} /></button></Dialog.Close></header>
           <Dialog.Description>把选中的论文内容添加到指定思维导图节点下，并保留完整来源。</Dialog.Description>
           <blockquote>{annotation.selectedText}</blockquote>
+          {annotation.previewImage && <img className="generation-area-preview" src={annotation.previewImage} alt="来源区域预览" />}
           <div className="paper-node-form">
             <label>节点标题<input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus /></label>
             <label>添加到思维导图<select value={documentId} onChange={(event) => changeDocument(event.target.value)}>{documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></label>

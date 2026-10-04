@@ -194,6 +194,32 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .outline-topic-input { grid-column: 5; width: 100%; min-height: 32px; overflow-wrap: anywhere; padding: 6px 5px 4px 1px; border: 0; outline: 0; color: #37413b; background: transparent; font-size: 15px; line-height: 1.55; white-space: pre-wrap; }
 .outline-topic-input::selection { color: #213027; background: #cbdccf; }
 .outline-topic-input:focus { color: #202923; }
+::highlight(document-links) { color: #23618a; background-color: #e2f0f7; text-decoration: underline; }
+.wiki-link { color: #23618a; background: #e2f0f7; border-radius: 3px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; pointer-events: auto; }
+.wiki-link:hover, .wiki-link:focus-visible { color: #114b71; background: #cce5f3; outline: 1px solid #7baac5; }
+.wiki-link.is-missing { text-decoration-style: dashed; }
+.mindmap-canvas .me-root .wiki-link { color: #d9f0ff; background: rgba(145, 203, 232, .2); }
+.document-backlinks { margin-top: 42px; padding: 18px 20px; border: 1px solid #dce5df; border-radius: 10px; background: #fbfcfb; color: #42584b; }
+.document-backlinks header, .document-backlinks header strong { display: flex; align-items: center; gap: 7px; }
+.document-backlinks header { justify-content: space-between; }
+.document-backlinks header strong { font-size: 13px; }
+.document-backlinks header strong span { padding: 1px 6px; border-radius: 10px; background: #e8efea; font-size: 10px; }
+.document-backlinks p { margin: 10px 0; color: #7e8a81; font-size: 11px; line-height: 1.7; }
+.backlink-list { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.backlink-list > button { display: grid; gap: 4px; width: 100%; padding: 9px 11px; border: 1px solid #e2e9e4; border-radius: 6px; color: #3c5847; background: white; text-align: left; cursor: pointer; }
+.backlink-list > button:hover { border-color: #9db7a6; background: #f0f6f2; }
+.backlink-list strong { font-size: 12px; }
+.backlink-list span { overflow-wrap: anywhere; color: #7e8a82; font-size: 11px; line-height: 1.55; }
+.backlink-empty { padding: 8px 0; color: #9aa49c; font-size: 12px; }
+.document-backlinks.is-overlay { grid-column: 1; grid-row: 2; z-index: 24; justify-self: end; align-self: start; width: min(310px, 45%); margin: 18px; padding: 14px 16px; box-shadow: 0 7px 26px rgba(38, 64, 46, .12); background: rgba(255, 255, 255, .98); }
+.document-link-error { position: fixed; z-index: 90; left: 50%; bottom: 82px; transform: translateX(-50%); display: flex; gap: 16px; align-items: center; max-width: 85vw; padding: 12px 18px; border: 1px solid #e2b9b4; border-radius: 8px; color: #91453d; background: #fff8f7; box-shadow: 0 6px 24px #0001; font-size: 12px; }
+.document-link-error button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.wiki-choice-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: #23352b55; }
+.wiki-choice { width: min(440px, 90vw); padding: 22px; border-radius: 12px; background: white; box-shadow: 0 15px 55px #0003; }
+.wiki-choice header { display: flex; align-items: center; justify-content: space-between; }
+.wiki-choice p { color: #7e8a81; font-size: 12px; line-height: 1.7; }
+.wiki-choice > button { display: grid; gap: 5px; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid #dce5df; border-radius: 7px; background: #f9fbf9; color: #3c5847; text-align: left; cursor: pointer; }
+.wiki-choice small { color: #89948c; }
 .outline-topic-input:empty::before { content: attr(data-placeholder); color: #b4bbb6; pointer-events: none; }
 .outline-topic-input a { color: #3f6f9b; text-decoration: underline; text-underline-offset: 2px; }
 .outline-topic-input code { padding: 1px 4px; border-radius: 4px; color: #6b4f3f; background: #f0ebe6; font: .9em ui-monospace, SFMono-Regular, Consolas, monospace; }

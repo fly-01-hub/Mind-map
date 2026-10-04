@@ -9,6 +9,9 @@ import { useSelectionStore } from '../../stores/selectionStore'
 import type { NodeData } from '../../types/mindmap'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
 import { findParent } from '../../utils/tree'
+import { clearWikiEditor, highlightWikiEditor, wikiLinkAtPoint } from '../../utils/wikiLinks'
+import { DocumentTitleInput } from '../documentLinks/DocumentTitleInput'
+import { WikiText } from '../documentLinks/WikiText'
 
 interface VisibleNode { node: NodeData; depth: number; number: string }
 type DropPosition = 'before' | 'inside' | 'after'
@@ -92,6 +95,7 @@ function OutlineRow({
   node, depth, number, showNumbering, previousId, nextId, selected, registerInput, focusNode, dragState, setDragState,
   onFormatSelection, onSelect,
   onOpenDetails,
+  onOpenWikiLink, readOnly,
 }: {
   node: NodeData
   depth: number
@@ -107,6 +111,8 @@ function OutlineRow({
   onFormatSelection: (selection?: FormatSelection) => void
   onSelect: (id: string, mode: 'single' | 'toggle' | 'range') => void
   onOpenDetails: (id: string) => void
+  onOpenWikiLink: (name: string) => void
+  readOnly: boolean
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null)
@@ -115,10 +121,17 @@ function OutlineRow({
 
   useEffect(() => {
     const editor = editorRef.current
-    if (!editor || document.activeElement === editor) return
-    const html = node.richText ? sanitizeRichText(node.richText) : richTextFromPlain(node.title)
-    if (sanitizeRichText(editor.innerHTML) !== html) editor.innerHTML = html
+    if (!editor) return
+    if (document.activeElement !== editor) {
+      const html = node.richText ? sanitizeRichText(node.richText) : richTextFromPlain(node.title)
+      if (sanitizeRichText(editor.innerHTML) !== html) editor.innerHTML = html
+    }
+    highlightWikiEditor(editor)
   }, [node.richText, node.title])
+  useEffect(() => {
+    const editor = editorRef.current
+    return () => { if (editor) clearWikiEditor(editor) }
+  }, [])
 
   const readEditor = () => {
     const html = sanitizeRichText(editorRef.current?.innerHTML ?? '')
@@ -127,6 +140,7 @@ function OutlineRow({
   }
 
   const commit = () => {
+    if (readOnly) return
     const value = readEditor()
     if (value.title !== node.title || value.richText !== node.richText) {
       useDocumentStore.getState().updateNode(node.id, { title: value.title, richText: value.richText })
@@ -329,7 +343,7 @@ function OutlineRow({
     >
       <button
         className="outline-drag-handle"
-        draggable
+        draggable={!readOnly}
         aria-label={`拖动主题 ${node.title}`}
         title="拖动调整顺序或层级"
         onDragStart={(event) => {
@@ -347,7 +361,7 @@ function OutlineRow({
         onClick={(event) => {
           const mode = event.shiftKey ? 'range' : (event.ctrlKey || event.metaKey) ? 'toggle' : 'single'
           onSelect(node.id, mode)
-          if (node.children.length && mode === 'single') useDocumentStore.getState().toggleCollapsed(node.id)
+          if (node.children.length && mode === 'single' && !readOnly) useDocumentStore.getState().toggleCollapsed(node.id)
           else if (mode === 'single') focusNode(node.id)
         }}
       >
@@ -374,7 +388,7 @@ function OutlineRow({
           fontStyle: node.style.fontStyle,
           textDecoration: node.style.textDecoration,
         }}
-        contentEditable
+        contentEditable={!readOnly}
         suppressContentEditableWarning
         role="textbox"
         aria-label="主题内容"
@@ -389,7 +403,18 @@ function OutlineRow({
             if (!document.activeElement?.closest('.outline-format-toolbar')) onFormatSelection(undefined)
           }, 0)
         }}
-        onInput={reportSelection}
+        onInput={(event) => {
+          if (!(event.nativeEvent as InputEvent).isComposing) highlightWikiEditor(event.currentTarget)
+          reportSelection()
+        }}
+        onCompositionEnd={(event) => highlightWikiEditor(event.currentTarget)}
+        onDoubleClickCapture={(event) => {
+          const name = wikiLinkAtPoint(event.currentTarget, event.clientX, event.clientY)
+          if (!name) return
+          event.preventDefault(); event.stopPropagation()
+          commit()
+          onOpenWikiLink(name)
+        }}
         onPointerUp={reportSelection}
         onKeyUp={reportSelection}
         onKeyDown={handleKeyDown}
@@ -429,7 +454,7 @@ function OutlineRow({
         /> : <button title="点击编辑描述" onClick={() => {
           setDescriptionEditing(true)
           requestAnimationFrame(() => descriptionRef.current?.focus())
-        }}>{node.note}</button>}
+        }}><WikiText text={node.note} onOpen={onOpenWikiLink} /></button>}
       </div>}
       {(node.tags.length > 0 || node.hyperlink || node.code || node.formula || node.table || node.image || node.attachments.length > 0) && <div className="outline-node-meta">
         {node.tags.map((tag) => <span className="outline-meta-tag" key={tag}>#{tag}</span>)}
@@ -519,12 +544,18 @@ function FormattingToolbar({ selection, editor, close }: {
   )
 }
 
-export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDetails, showNumbering = false }: {
+export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDetails, onDropFiles, onOpenPaperNode, paperNodeIds = [], showNumbering = false, onOpenWikiLink, readOnly = false, backlinks }: {
   root: NodeData
   documentTitle: string
   onRenameDocument: (title: string) => void
   onOpenDetails: (nodeId: string) => void
   showNumbering?: boolean
+  onDropFiles?: (files: File[], nodeId: string) => void
+  onOpenPaperNode?: (nodeId: string) => void
+  paperNodeIds?: string[]
+  onOpenWikiLink: (name: string) => void
+  readOnly?: boolean
+  backlinks?: React.ReactNode
 }) {
   const inputsRef = useRef(new Map<string, HTMLElement>())
   const explicitFocusRef = useRef<string | undefined>(undefined)
@@ -636,18 +667,33 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
   }
 
   return (
-    <main className="outline-stage" onDragLeave={(event) => {
+    <main className="outline-stage" onDragOverCapture={(event) => {
+      if (readOnly) return
+      if (onDropFiles && event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' }
+    }} onDropCapture={(event) => {
+      if (readOnly) { event.preventDefault(); event.stopPropagation(); return }
+      if (!onDropFiles || !event.dataTransfer.files.length) return
+      event.preventDefault(); event.stopPropagation()
+      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-node-id]')?.dataset.nodeId ?? root.id
+      onDropFiles(Array.from(event.dataTransfer.files), target)
+    }} onClickCapture={(event) => {
+      if ((event.target as HTMLElement).closest('.wiki-link')) return
+      if (readOnly && (event.target as HTMLElement).closest('.outline-topic-tools, .outline-task, .outline-drag-handle, .outline-description > button, .outline-empty-topic, .outline-node-meta button')) { event.preventDefault(); event.stopPropagation(); return }
+      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
+      if (target && paperNodeIds.includes(target) && !(event.target as HTMLElement).closest('[contenteditable], input, textarea, .outline-bullet, .outline-drag-handle') && !event.shiftKey && !event.ctrlKey && !event.metaKey) onOpenPaperNode?.(target)
+    }} onDragLeave={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragState(undefined)
     }} onPointerDown={(event) => {
       if (!(event.target as HTMLElement).closest('.outline-format-toolbar, .outline-topic-input')) setFormatSelection(undefined)
     }}>
       <section className="outline-document">
-        <input
+        <DocumentTitleInput
           className="outline-document-title"
           value={documentTitle}
           aria-label="文档标题"
           placeholder="未命名文档"
-          onChange={(event) => onRenameDocument(event.target.value)}
+          onCommit={onRenameDocument}
+          disabled={readOnly}
         />
         <div className="outline-hint">Enter 新建同级 · Tab 缩进 · Shift + Tab 提升 · Ctrl / Shift 点击圆点多选 · 拖动手柄调整结构</div>
         <div className="outline-list" role="tree" aria-label="文档大纲">
@@ -657,6 +703,8 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
             depth={depth}
             number={number}
             showNumbering={showNumbering}
+            onOpenWikiLink={onOpenWikiLink}
+            readOnly={readOnly}
             previousId={visible[index - 1]?.node.id}
             nextId={visible[index + 1]?.node.id}
             selected={selectedSet.has(node.id)}
@@ -673,6 +721,7 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
           />)}
           {!visible.length && <button className="outline-empty-topic" onClick={createFirst}><Plus size={16} />输入第一个主题</button>}
         </div>
+        {backlinks}
       </section>
       {formatSelection && <FormattingToolbar
         selection={formatSelection}

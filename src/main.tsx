@@ -3,13 +3,24 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
+import './android.css'
 import App from './App.tsx'
 import { useDocumentStore } from './stores/documentStore'
 import { useSaveStore } from './stores/saveStore'
+import { isAndroidApp, printAndroidPage } from './services/platform/androidFiles'
+
+if (isAndroidApp()) {
+  document.documentElement.dataset.platform = 'android'
+  window.print = () => { void printAndroidPage().catch((error) => window.alert(error instanceof Error ? error.message : '打印失败。')) }
+  window.addEventListener('researchmind:pause', () => {
+    void import('./services/persistence/localPersistence').then(({ flushLocalPersistence }) => flushLocalPersistence())
+      .catch(() => useSaveStore.getState().setStatus('error'))
+  })
+}
 
 if (
   (window.location.protocol === 'http:' || window.location.protocol === 'https:')
-  && 'serviceWorker' in navigator
+  && 'serviceWorker' in navigator && !isAndroidApp()
 ) {
   let reloadingForUpdate = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {

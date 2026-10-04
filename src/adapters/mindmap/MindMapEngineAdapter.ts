@@ -5,9 +5,10 @@ import MindElixir, {
   type Theme,
   type Topic,
 } from 'mind-elixir'
-import type { MapArrow, MapSummary, NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
+import type { MapArrow, MapSummary, MindMapDocument, NodeData, NodeStyle, TaskStatus } from '../../types/mindmap'
 import { downloadBlob } from '../../services/export/download'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
+import { clearWikiEditor, decorateWikiLinks, highlightWikiEditor } from '../../utils/wikiLinks'
 
 interface EngineMetadata {
   createdAt: string
@@ -65,6 +66,22 @@ export class MindMapEngineAdapter {
   private events: AdapterEvents
   private disposed = false
   private refreshing = false
+  private sourceCounts: Record<string, number> = {}
+  private documents: MindMapDocument[] = []
+
+  setDocuments(documents: MindMapDocument[]) {
+    this.documents = documents
+    this.applyRichText()
+  }
+
+  finishEdit() {
+    this.engine.nodes.querySelector<HTMLElement>('#input-box[contenteditable]')?.blur()
+  }
+
+  setSourceCounts(counts: Record<string, number>) {
+    this.sourceCounts = counts
+    this.applyRichText()
+  }
 
   constructor(element: HTMLElement, events: AdapterEvents) {
     this.events = events
@@ -126,6 +143,8 @@ export class MindMapEngineAdapter {
   }
 
   destroy() {
+    const editor = this.engine.nodes.querySelector<HTMLElement>('#input-box[contenteditable]')
+    if (editor) clearWikiEditor(editor)
     this.disposed = true
     this.engine.destroy()
   }
@@ -142,15 +161,21 @@ export class MindMapEngineAdapter {
       element.nodeObj.metadata = metadata
       input.contentEditable = 'true'
       input.innerHTML = originalRichText ?? richTextFromPlain(element.nodeObj.topic)
+      highlightWikiEditor(input)
       const syncRichText = () => {
         metadata.richText = compactRichText(sanitizeRichText(input.innerHTML), input.innerText.trim())
+        if (!composing) highlightWikiEditor(input)
       }
+      let composing = false
+      input.addEventListener('compositionstart', () => { composing = true })
+      input.addEventListener('compositionend', () => { composing = false; syncRichText() })
       input.addEventListener('input', syncRichText)
       input.addEventListener('keyup', syncRichText)
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') cancelled = true
       }, { capture: true })
       input.addEventListener('blur', () => {
+        clearWikiEditor(input)
         if (cancelled) metadata.richText = originalRichText
         else {
           syncRichText()
@@ -218,7 +243,9 @@ export class MindMapEngineAdapter {
   reveal(id: string) {
     const element = this.safeFind(id)
     if (!element) return
-    this.engine.selectNode(element)
+    // Reveal is an explicit navigation, not an additive selection gesture.
+    this.setSelections([id])
+    this.events.onSelectionChange([id])
     this.engine.scrollIntoView(element, true)
   }
 
@@ -373,7 +400,18 @@ export class MindMapEngineAdapter {
       const element = topic as Topic<EngineMetadata>
       const richText = element.nodeObj?.metadata?.richText
       const text = topic.querySelector<HTMLElement>(':scope > .text')
-      if (richText && text) text.innerHTML = sanitizeRichText(richText)
+      if (text) text.innerHTML = decorateWikiLinks(richText ?? richTextFromPlain(element.nodeObj.topic), this.documents)
+      topic.querySelector(':scope > .node-source-badge')?.remove()
+      const count = this.sourceCounts[element.nodeObj?.id]
+      if (count) {
+        const badge = document.createElement('button')
+        badge.type = 'button'; badge.className = 'node-source-badge'
+        badge.dataset.sourceNodeId = element.nodeObj.id
+        badge.textContent = `📄${count}`
+        badge.setAttribute('aria-label', `查看 ${count} 条论文来源`)
+        badge.title = '查看来源并在导图旁定位原文'
+        topic.append(badge)
+      }
     })
   }
 

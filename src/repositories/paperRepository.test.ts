@@ -88,7 +88,8 @@ describe('paper repository', () => {
 
     const updated = useDocumentStore.getState().documents[0]
     expect(findNode(updated.root, result.node.id)).toMatchObject({ title: 'Multi-head Attention' })
-    expect(findNode(updated.root, result.node.id)?.note).toContain('attention · Page 5')
+    expect(findNode(updated.root, result.node.id)?.note).toBe('关键机制')
+    expect((await appDatabase.paperAnnotations.get(annotation.id))?.content).toBe('')
     expect(await appDatabase.annotationNodeRelations.count()).toBe(1)
     expect(await appDatabase.nodePaperRelations.where('nodeId').equals(result.node.id).count()).toBe(1)
   })

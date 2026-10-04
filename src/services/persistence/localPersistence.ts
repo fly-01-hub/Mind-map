@@ -9,19 +9,25 @@ let saveTimer: number | undefined
 let lastDocuments: MindMapDocument[] | undefined
 let lastFolders: FolderData[] | undefined
 const lastSnapshotAt = new Map<string, number>()
+let flushQueue: Promise<void> = Promise.resolve()
 
-export async function flushLocalPersistence() {
+export function flushLocalPersistence() {
   if (saveTimer) {
     window.clearTimeout(saveTimer)
     saveTimer = undefined
   }
-  const latest = useDocumentStore.getState()
-  await Promise.all([
-    documentRepository.saveDocuments(latest.documents),
-    documentRepository.saveFolders(latest.folders),
-  ])
-  await createIntervalSnapshots(latest.documents)
-  useSaveStore.getState().markLocal()
+  const pending = flushQueue.catch(() => undefined).then(async () => {
+    const latest = useDocumentStore.getState()
+    await Promise.all([
+      documentRepository.saveDocuments(latest.documents),
+      documentRepository.saveFolders(latest.folders),
+    ])
+    await createIntervalSnapshots(latest.documents)
+    // A newer edit queued during this save still needs to show as unsaved.
+    if (useDocumentStore.getState().documents === latest.documents && useDocumentStore.getState().folders === latest.folders) useSaveStore.getState().markLocal()
+  })
+  flushQueue = pending
+  return pending
 }
 
 export async function initializeLocalPersistence() {

@@ -84,6 +84,8 @@ export interface MapSummary {
 export interface MindMapDocument {
   id: string
   title: string
+  /** Previous names keep saved history and old external imports resolvable. */
+  linkAliases?: string[]
   root: NodeData
   arrows?: MapArrow[]
   summaries?: MapSummary[]

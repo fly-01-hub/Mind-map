@@ -19,7 +19,8 @@ export const documentRepository = {
 
   loadDocuments: () => appDatabase.documents.toArray(),
   loadFolders: () => appDatabase.folders.toArray(),
-  saveDocuments: (documents: MindMapDocument[]) => appDatabase.documents.bulkPut(structuredClone(documents)),
+  saveDocuments: async (documents: MindMapDocument[]) => appDatabase.transaction('rw', appDatabase.documents,
+    () => appDatabase.documents.bulkPut(structuredClone(documents))),
   saveDocument: (document: MindMapDocument) => appDatabase.documents.put(structuredClone(document)),
   saveFolders: (folders: FolderData[]) => appDatabase.folders.bulkPut(structuredClone(folders)),
   async permanentlyDeleteDocument(id: string) {

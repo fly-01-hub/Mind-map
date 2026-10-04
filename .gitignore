@@ -28,3 +28,18 @@ release
 *.sw?
 
 .vercel
+
+# Android build products, SDK paths, signing material and personal exports
+android/.gradle/
+android/**/build/
+android/local.properties
+android/app/src/main/assets/web/
+.android-tools/
+*.jks
+*.keystore
+*.apk
+*.aab
+*.researchmind
+.env
+.env.*
+!.env.example

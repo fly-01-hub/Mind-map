@@ -1,4 +1,5 @@
-export type PaperAnnotationType = 'highlight' | 'underline' | 'note'
+export type PaperAnnotationType = 'highlight' | 'underline' | 'note' | 'area'
+export type AnnotationColor = 'yellow' | 'red' | 'green' | 'blue' | 'purple'
 
 export interface AnnotationRect {
   x: number
@@ -16,6 +17,10 @@ export interface AnnotationPositionData {
 }
 
 export interface PaperAnnotation {
+  areaStyle?: 'highlight' | 'outline'
+  color?: AnnotationColor
+  tags?: string[]
+  previewImage?: string
   id: string
   paperId: string
   userId: string
@@ -39,6 +44,9 @@ export interface AnnotationNodeRelation {
 }
 
 export interface PdfTextSelection {
+  areaStyle?: 'highlight' | 'outline'
+  kind?: 'text' | 'area'
+  previewImage?: string
   pageNumber: number
   selectedText: string
   positionData: AnnotationPositionData
@@ -46,6 +54,10 @@ export interface PdfTextSelection {
 }
 
 export interface NewPaperAnnotation {
+  areaStyle?: 'highlight' | 'outline'
+  color?: AnnotationColor
+  tags?: string[]
+  previewImage?: string
   paperId: string
   userId: string
   annotationType: PaperAnnotationType

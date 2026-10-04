@@ -86,7 +86,7 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   await page.getByRole('button', { name: '创建节点' }).click()
   await expect(page.getByText('已创建节点“Generated Research Insight”')).toBeVisible()
   const generatedAnnotation = page.locator('.paper-annotation-list article').first()
-  await expect(generatedAnnotation.getByText('已生成节点：Generated Research Insight')).toBeVisible()
+  await expect(generatedAnnotation.getByText('关联节点：Generated Research Insight')).toBeVisible()
   await generatedAnnotation.getByRole('button', { name: '打开已生成节点 Generated Research Insight' }).click()
   await expect(page).toHaveURL(/\/map\/research-map\?nodeId=/)
   await expect(page.locator('.me-tpc', { hasText: 'Generated Research Insight' })).toBeVisible()

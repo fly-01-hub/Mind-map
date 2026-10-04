@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+
+def appVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+android {
+    namespace 'com.fly01hub.researchmind'
+    compileSdk 35
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'com.fly01hub.researchmind'
+        minSdk 28
+        targetSdk 35
+        versionCode 10700
+        versionName appVersion
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes {
+        release {
+            // Personal sideload build, not Play Store distribution. Preserve this local key for updates.
+            signingConfig signingConfigs.debug
+            debuggable false
+            minifyEnabled false
+        }
+    }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }

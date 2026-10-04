@@ -8,6 +8,7 @@ import {
   splitNode, topLevelSelectedNodes,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
+import { documentNameKey, matchingDocuments, rewriteTreeLinks, uniqueDocumentName } from '../utils/wikiLinks'
 
 interface DocumentSnapshot { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] }
 export interface HistoryState { past: DocumentSnapshot[]; future: DocumentSnapshot[] }
@@ -19,6 +20,8 @@ export interface DocumentState {
   hydrated: boolean
   histories: Record<string, HistoryState>
   clipboard?: ClipboardPayload
+  nameError?: string
+  clearNameError: () => void
   openDocument: (id: string) => void
   hydrate: (documents: MindMapDocument[], folders: FolderData[]) => void
   createDocument: (title?: string) => MindMapDocument
@@ -80,15 +83,33 @@ function updateActive(
   if (!id) return {}
   const current = state.documents.find((document) => document.id === id)
   if (!current) return {}
-  const next = transform(current)
+  let next = transform(current)
   if (next === current) return {}
+  const title = next.root.title.trim() || current.title
+  if (title !== current.title && matchingDocuments(state.documents, title).some((item) => item.id !== current.id)) {
+    return { nameError: `文档「${title}」已存在，请使用其他名称。` }
+  }
+  next = { ...next, title, root: { ...next.root, title } }
   const histories = { ...state.histories }
   if (recordHistory) {
     const history = histories[id] ?? { past: [], future: [] }
     histories[id] = { past: [...history.past, snapshot(current)].slice(-50), future: [] }
   }
   useSaveStore.getState().markLocal()
-  return { documents: state.documents.map((document) => document.id === id ? next : document), histories }
+  return { documents: renamedDocuments(state.documents, current, next), histories }
+}
+
+function renamedDocuments(documents: MindMapDocument[], current: MindMapDocument, next: MindMapDocument) {
+  if (current.title === next.title) return documents.map((item) => item.id === current.id ? next : item)
+  const uniqueOldName = matchingDocuments(documents, current.title).length === 1
+  const aliases = uniqueOldName ? [...new Set([...(current.linkAliases ?? []), current.title])]
+    .filter((name) => documentNameKey(name) !== documentNameKey(next.title)) : current.linkAliases
+  return documents.map((item) => {
+    const value = item.id === current.id ? { ...next, linkAliases: aliases } : item
+    if (!uniqueOldName || item.deletedAt) return value
+    const root = rewriteTreeLinks(value.root, current.title, next.title)
+    return root === value.root ? value : { ...value, root, version: value.version + 1, updatedAt: new Date().toISOString() }
+  })
 }
 
 function withRoot(document: MindMapDocument, root: NodeData): MindMapDocument {
@@ -127,9 +148,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   ],
   hydrated: false,
   histories: {},
+  clearNameError: () => set({ nameError: undefined }),
   openDocument: (activeDocumentId) => set({ activeDocumentId }),
   hydrate: (documents, folders) => set({ documents, folders, hydrated: true }),
   createDocument: (title = '未命名思维导图') => {
+    title = uniqueDocumentName(get().documents, title)
     const timestamp = new Date().toISOString()
     const document: MindMapDocument = {
       id: crypto.randomUUID(), title, root: createNode(title), isFavorite: false,
@@ -138,12 +161,15 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set((state) => ({ documents: [document, ...state.documents], activeDocumentId: document.id }))
     return document
   },
-  renameDocument: (id, title) => set((state) => ({
-    documents: state.documents.map((document) => document.id === id ? touchDocument(document, {
-      title,
-      root: { ...document.root, title, updatedAt: new Date().toISOString() },
-    }) : document),
-  })),
+  renameDocument: (id, title) => set((state) => {
+    const current = state.documents.find((item) => item.id === id)
+    title = title.trim()
+    if (!current || title === current.title) return {}
+    if (!title) return { nameError: '文档名称不能为空。' }
+    if (matchingDocuments(state.documents, title).some((item) => item.id !== id)) return { nameError: `文档「${title}」已存在，请使用其他名称。` }
+    const next = touchDocument(current, { title, root: { ...current.root, title, richText: undefined, updatedAt: new Date().toISOString() } })
+    return { documents: renamedDocuments(state.documents, current, next), nameError: undefined }
+  }),
   updateMapAppearance: (id, appearance) => set((state) => ({
     documents: state.documents.map((document) => document.id === id ? touchDocument(document, appearance) : document),
   })),
@@ -181,14 +207,21 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   }),
   moveDocument: (documentId, folderId) => set((state) => ({ documents: state.documents.map((document) => document.id === documentId ? touchDocument(document, { folderId }) : document) })),
   trashDocument: (id) => set((state) => ({ documents: state.documents.map((document) => document.id === id ? touchDocument(document, { deletedAt: new Date().toISOString() }) : document) })),
-  restoreDocument: (id) => set((state) => ({ documents: state.documents.map((document) => document.id === id ? touchDocument(document, { deletedAt: undefined }) : document) })),
+  restoreDocument: (id) => set((state) => ({ documents: state.documents.map((document) => {
+    if (document.id !== id) return document
+    const title = uniqueDocumentName(state.documents, document.title, id)
+    return touchDocument(document, { deletedAt: undefined, title, root: { ...document.root, title },
+      linkAliases: document.linkAliases?.filter((alias) => !matchingDocuments(state.documents, alias).some((item) => item.id !== id)) })
+  }) })),
   removeDocumentFromState: (id) => set((state) => ({ documents: state.documents.filter((document) => document.id !== id) })),
-  restoreVersion: (documentId, title, root, version, arrows = [], summaries = []) => set((state) => ({
-    documents: state.documents.map((document) => document.id === documentId ? {
-      ...document, title, root: clone(root), arrows: structuredClone(arrows), summaries: structuredClone(summaries),
-      version: Math.max(document.version, version) + 1, updatedAt: new Date().toISOString(),
-    } : document),
-  })),
+  restoreVersion: (documentId, title, root, version, arrows = [], summaries = []) => set((state) => {
+    const current = state.documents.find((item) => item.id === documentId)
+    if (!current) return {}
+    title = uniqueDocumentName(state.documents, title, documentId)
+    const next = { ...current, title, root: { ...clone(root), title }, arrows: structuredClone(arrows), summaries: structuredClone(summaries),
+      version: Math.max(current.version, version) + 1, updatedAt: new Date().toISOString() }
+    return { documents: renamedDocuments(state.documents, current, next) }
+  }),
   commitTree: (root) => set((state) => updateActive(state, (document) => ({ ...withRoot(document, root), title: root.title }))),
   commitMap: (root, arrows, summaries) => set((state) => updateActive(state, (document) => ({
     ...withRoot(document, root), title: root.title, arrows: structuredClone(arrows), summaries: structuredClone(summaries),
@@ -334,11 +367,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const history = id ? state.histories[id] : undefined
     if (!id || !document || !history?.past.length) return state
     const previous = history.past.at(-1)!
+    const title = uniqueDocumentName(state.documents, previous.root.title, id)
     useSaveStore.getState().markLocal()
     return {
-      documents: state.documents.map((item) => item.id === id ? {
-        ...withRoot(item, clone(previous.root)), arrows: structuredClone(previous.arrows), summaries: structuredClone(previous.summaries),
-      } : item),
+      documents: renamedDocuments(state.documents, document, {
+        ...withRoot(document, { ...clone(previous.root), title }), title, arrows: structuredClone(previous.arrows), summaries: structuredClone(previous.summaries),
+      }),
       histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [snapshot(document), ...history.future] } },
     }
   }),
@@ -348,11 +382,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const history = id ? state.histories[id] : undefined
     if (!id || !document || !history?.future.length) return state
     const next = history.future[0]
+    const title = uniqueDocumentName(state.documents, next.root.title, id)
     useSaveStore.getState().markLocal()
     return {
-      documents: state.documents.map((item) => item.id === id ? {
-        ...withRoot(item, clone(next.root)), arrows: structuredClone(next.arrows), summaries: structuredClone(next.summaries),
-      } : item),
+      documents: renamedDocuments(state.documents, document, {
+        ...withRoot(document, { ...clone(next.root), title }), title, arrows: structuredClone(next.arrows), summaries: structuredClone(next.summaries),
+      }),
       histories: { ...state.histories, [id]: { past: [...history.past, snapshot(document)], future: history.future.slice(1) } },
     }
   }),

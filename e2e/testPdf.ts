@@ -1,5 +1,4 @@
-export function createTestPdf() {
-  const firstContent = 'BT /F1 18 Tf 72 720 Td (ResearchMind first page) Tj ET'
+export function createTestPdf(firstContent = 'BT /F1 18 Tf 72 720 Td (ResearchMind first page) Tj ET') {
   const secondContent = 'BT /F1 18 Tf 72 720 Td (Second-page target phrase) Tj ET'
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',

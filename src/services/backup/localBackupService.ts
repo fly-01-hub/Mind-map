@@ -1,4 +1,5 @@
 import { appDatabase, type AppMeta, type StoredAttachmentBlob } from '../../db/appDatabase'
+import { isAndroidApp, saveAndroidFile } from '../platform/androidFiles'
 import type { AnnotationNodeRelation, PaperAnnotation } from '../../types/annotation'
 import type { DocumentVersion, FolderData, MindMapDocument } from '../../types/mindmap'
 import type { NodePaperRelation, Paper, PaperFileCache, PaperReadingState } from '../../types/paper'
@@ -90,6 +91,32 @@ function parseBackup(text: string): LocalBackupPayload {
   for (const table of requiredTables) {
     if (!Array.isArray(value.tables[table])) throw new Error(`备份文件缺少 ${table} 数据。`)
   }
+  // Reject malformed application records before entering the destructive restore
+  // transaction. Optional new annotation fields keep v1 backups compatible.
+  const tables = value.tables
+  const validNode = (root: unknown) => {
+    const pending = [root]
+    while (pending.length) {
+      const node = pending.pop()
+      if (!isRecord(node) || typeof node.id !== 'string' || typeof node.title !== 'string' || !Array.isArray(node.children)) return false
+      pending.push(...node.children)
+    }
+    return true
+  }
+  for (const record of [...tables.documents as unknown[], ...tables.versions as unknown[]]) {
+    if (!isRecord(record) || typeof record.id !== 'string' || !validNode(record.root)) throw new Error('备份中的文档结构损坏；现有资料未被修改。')
+    if (record.linkAliases !== undefined && (!Array.isArray(record.linkAliases) || record.linkAliases.some((name) => typeof name !== 'string'))) throw new Error('备份中的文档旧名称格式损坏；现有资料未被修改。')
+  }
+  for (const record of tables.paperAnnotations as unknown[]) {
+    if (!isRecord(record) || typeof record.id !== 'string' || typeof record.paperId !== 'string' || typeof record.selectedText !== 'string' || typeof record.content !== 'string' || !Number.isInteger(record.pageNumber) || Number(record.pageNumber) < 1 || !['highlight', 'underline', 'note', 'area'].includes(String(record.annotationType)) || !isRecord(record.positionData) || !Array.isArray(record.positionData.rects)) throw new Error('备份中的批注格式损坏；现有资料未被修改。')
+    if (record.color !== undefined && !['yellow', 'red', 'green', 'blue', 'purple'].includes(String(record.color))) throw new Error('备份中的批注颜色无效。')
+    if (record.tags !== undefined && (!Array.isArray(record.tags) || record.tags.some((tag) => typeof tag !== 'string'))) throw new Error('备份中的批注标签无效。')
+    if (record.previewImage !== undefined && (typeof record.previewImage !== 'string' || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(record.previewImage))) throw new Error('备份中的区域预览无效。')
+    if (record.areaStyle !== undefined && (!['highlight', 'outline'].includes(String(record.areaStyle)) || record.annotationType !== 'area')) throw new Error('备份中的区域高亮样式无效。')
+    for (const rect of record.positionData.rects) {
+      if (!isRecord(rect) || ['x', 'y', 'width', 'height'].some((key) => typeof rect[key] !== 'number' || !Number.isFinite(rect[key]) || Number(rect[key]) < 0 || Number(rect[key]) > 1)) throw new Error('备份中的批注坐标无效。')
+    }
+  }
   return value as unknown as LocalBackupPayload
 }
 
@@ -176,6 +203,7 @@ interface SaveFilePickerWindow extends Window {
 }
 
 export async function saveBackupFile(backup: BackupFile) {
+  if (isAndroidApp()) return saveAndroidFile(backup.blob, backup.fileName)
   const picker = (window as SaveFilePickerWindow).showSaveFilePicker
   if (picker) {
     const handle = await picker({

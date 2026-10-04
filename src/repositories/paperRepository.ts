@@ -65,6 +65,11 @@ async function link(documentId: string, nodeId: string, paperId: string): Promis
 }
 
 export const paperRepository = {
+  async createOrReuse(file: File, userId: string) {
+    if (!isPdfFile(file)) throw new Error('请选择 PDF 文件。')
+    const fileChecksum = await checksum(file)
+    return appDatabase.transaction('rw', [appDatabase.papers, appDatabase.paperFiles], () => createOrReusePaper(file, userId, fileChecksum))
+  },
   listPapers: () => appDatabase.papers.filter((paper) => !paper.deletedAt).toArray(),
   listRelations: () => appDatabase.nodePaperRelations.filter((relation) => !relation.deletedAt).toArray(),
   listAnnotations: () => appDatabase.paperAnnotations.filter((annotation) => !annotation.deletedAt).toArray(),

@@ -15,7 +15,8 @@ import { countNodes, findNode, findParent, getBreadcrumbs } from '../../utils/tr
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
-import { isPdfFile, titleFromPdfFileName } from '../../repositories/paperRepository'
+import { isPdfFile, paperRepository } from '../../repositories/paperRepository'
+import { loadPdfDocument } from '../../services/pdf/pdfParser'
 import { usePaperStore } from '../../stores/paperStore'
 import { useUserStore } from '../../stores/userStore'
 import { documentRepository } from '../../repositories/documentRepository'
@@ -28,9 +29,19 @@ import { searchDocuments } from '../../utils/search'
 import { ShortcutHelpDialog } from './ShortcutHelpDialog'
 import { OutlineEditor } from '../outline/OutlineEditor'
 import type { NodeData } from '../../types/mindmap'
+import { NodeSources } from '../paper/NodeSources'
+import { KnowledgeFeedback } from '../paper/knowledgeFeedback'
+import { knowledgeAction } from '../../stores/knowledgeFeedbackStore'
+import { ANNOTATION_DRAG_TYPE, paperKnowledgeService, parseAnnotationReference } from '../../services/paper/paperKnowledgeService'
+import { flushLocalPersistence } from '../../services/persistence/localPersistence'
+import { findBacklinks, matchingDocuments, wikiLinkAtPoint } from '../../utils/wikiLinks'
+import { DocumentTitleInput } from '../documentLinks/DocumentTitleInput'
+import { DocumentLinks } from '../documentLinks/DocumentLinks'
+import '../paper/paper-knowledge.css'
 import 'mind-elixir/style.css'
 
 const NodeInspector = lazy(() => import('../nodeInspector/NodeInspector').then((module) => ({ default: module.NodeInspector })))
+const PaperReaderPage = lazy(() => import('../paper/PaperReaderPage').then((module) => ({ default: module.PaperReaderPage })))
 
 const saveLabels = {
   saving: { label: '正在保存…', icon: <span className="sync-dot" /> },
@@ -85,7 +96,13 @@ export function MapEditorPage() {
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [moveQuery, setMoveQuery] = useState('')
   const [readOnly, setReadOnly] = useState(false)
+  const [readingPaper, setReadingPaper] = useState<{ paperId: string; annotationId?: string; nodeId?: string; locationKey: number }>()
+  const [paperPickerOpen, setPaperPickerOpen] = useState(false)
+  const paperOpenTimerRef = useRef<number | undefined>(undefined)
   const [presentationMode, setPresentationMode] = useState(false)
+  const [backlinksOpen, setBacklinksOpen] = useState(false)
+  const [ambiguousLink, setAmbiguousLink] = useState<string>()
+  const wikiBusyRef = useRef(false)
   const [canvasScale, setCanvasScale] = useState(1)
   const [isPanning, setIsPanning] = useState(false)
   const [descriptionFocusRequest, setDescriptionFocusRequest] = useState<{ nodeId: string; nonce: number }>()
@@ -100,8 +117,10 @@ export function MapEditorPage() {
   const papers = usePaperStore((state) => state.papers)
   const paperAnnotations = usePaperStore((state) => state.annotations)
   const annotationNodeRelations = usePaperStore((state) => state.annotationNodeRelations)
+  const nodePaperRelations = usePaperStore((state) => state.relations)
 
   const documents = useDocumentStore((state) => state.documents)
+  const nameError = useDocumentStore((state) => state.nameError)
   const document = documents.find((item) => item.id === id)
   const openDocument = useDocumentStore((state) => state.openDocument)
   const renameDocument = useDocumentStore((state) => state.renameDocument)
@@ -150,10 +169,83 @@ export function MapEditorPage() {
     }
     return sources
   }, [annotationNodeRelations, document, paperAnnotations, papers])
+  const backlinks = useMemo(() => document ? findBacklinks(documents, document) : [], [documents, document])
+  useEffect(() => { adapterRef.current?.setDocuments(documents) }, [documents, engineReady])
+
+  const openWikiLink = async (name: string, targetId?: string) => {
+    if (wikiBusyRef.current) return
+    wikiBusyRef.current = true
+    try {
+      adapterRef.current?.finishEdit()
+      const active = globalThis.document.activeElement
+      if (active instanceof HTMLElement && active.closest('.editor-shell')) active.blur()
+      // Rich-text-only edits can commit on the next microtask after engine blur.
+      await Promise.resolve()
+      const targets = matchingDocuments(useDocumentStore.getState().documents, name)
+      if (!targetId && targets.length > 1) { setAmbiguousLink(name); return }
+      if (!targets.length && (readOnly || presentationMode)) {
+        useDocumentStore.setState({ nameError: `文档「${name}」尚未创建，请退出只读或演示模式后创建。` })
+        return
+      }
+      const target = targetId ? targets.find((item) => item.id === targetId) : targets[0] ?? useDocumentStore.getState().createDocument(name)
+      if (!target) return
+      await flushLocalPersistence()
+      setAmbiguousLink(undefined)
+      setBacklinksOpen(true)
+      if (target.id !== id) {
+        setFocusRoot(undefined); setSelectedNode(undefined); setInspectorOpen(false)
+        navigate(`/map/${target.id}`)
+      }
+    } catch {
+      useSaveStore.getState().setStatus('error')
+      useDocumentStore.setState({ nameError: '链接打开失败，当前编辑仍保留在内存中。请重试并检查本地保存状态。' })
+    } finally { wikiBusyRef.current = false }
+  }
+
+  useEffect(() => {
+    const counts = Object.fromEntries(Object.entries(markdownPaperSources).map(([nodeId, sources]) => [nodeId, sources.length]))
+    adapterRef.current?.setSourceCounts(counts)
+  }, [markdownPaperSources, engineReady, viewRoot])
+  const openPaper = (paperId: string, annotationId?: string, ownerNodeId?: string) => {
+    const candidates = nodePaperRelations.filter((item) => item.documentId === id && item.paperId === paperId && document && findNode(document.root, item.nodeId))
+    const sourceNodeId = annotationId && annotationNodeRelations.find((source) => source.documentId === id && source.annotationId === annotationId && source.nodeId === selectedNodeId)?.nodeId
+    const contextId = ownerNodeId ?? sourceNodeId ?? selectedNodeId
+    const path = contextId && document ? getBreadcrumbs(document.root, contextId).reverse() : []
+    const isLiterature = (nodeId: string) => !annotationNodeRelations.some((source) => source.documentId === id && source.nodeId === nodeId)
+    const literature = path.map((node) => candidates.find((item) => item.nodeId === node.id && isLiterature(item.nodeId))).find(Boolean) ?? candidates.find((item) => isLiterature(item.nodeId))
+    const nodeId = literature?.nodeId ?? ownerNodeId ?? sourceNodeId ?? candidates[0]?.nodeId
+    setInspectorOpen(false); setPaperPickerOpen(false); setReadingPaper((previous) => ({ paperId, annotationId, nodeId, locationKey: (previous?.locationKey ?? 0) + 1 }))
+  }
+  const goToLinkedNode = (documentId: string, nodeId: string) => {
+    setBacklinksOpen(false)
+    if (documentId !== id) { navigate(`/map/${documentId}?nodeId=${encodeURIComponent(nodeId)}`); return }
+    setFocusRoot(undefined); useDocumentStore.getState().revealNode(nodeId); setSelectedNode(nodeId)
+    pendingRevealRef.current = nodeId
+    requestAnimationFrame(() => { adapterRef.current?.select(nodeId); adapterRef.current?.reveal(nodeId) })
+  }
+  const splitOpen = Boolean(readingPaper)
+  useEffect(() => {
+    if (!engineReady) return
+    const frame = requestAnimationFrame(() => setCanvasScale(adapterRef.current?.fit() ?? 1))
+    return () => cancelAnimationFrame(frame)
+  }, [splitOpen, engineReady])
+  const linkToNode = (annotationId: string, nodeId: string) => {
+    if (readOnly || !document) return
+    void (async () => {
+      let added: string[] = []
+      await knowledgeAction(async () => {
+      added = await paperKnowledgeService.linkAnnotations([annotationId], document.id, [nodeId])
+      setSelectedNode(nodeId)
+      return added
+      }, '批注已关联到节点；节点内容保持不变', () => paperKnowledgeService.unlinkRelations(added))
+    })()
+  }
 
   useEffect(() => {
     if (id) openDocument(id)
-    return () => setFocusRoot(undefined)
+    setReadingPaper(undefined)
+    setPaperPickerOpen(false)
+    return () => { setFocusRoot(undefined); window.clearTimeout(paperOpenTimerRef.current) }
   }, [id, openDocument, setFocusRoot])
 
   useEffect(() => {
@@ -244,7 +336,7 @@ export function MapEditorPage() {
         setNodeAnchor(adapterRef.current?.anchorFor(revealId))
       }))
     }
-  }, [document?.arrows, document?.summaries, engineReady, focusRootId, viewRoot])
+  }, [document?.arrows, document?.summaries, engineReady, focusRootId, viewRoot, nameError])
 
   useEffect(() => {
     if (!engineReady) return
@@ -343,6 +435,7 @@ export function MapEditorPage() {
     const handleWindowShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       const target = event.target as HTMLElement | null
+      if (target?.closest('.embedded-reader, [role="dialog"]')) return
       const editing = Boolean(target?.matches('input, textarea, select, [contenteditable]'))
       const mod = event.ctrlKey || event.metaKey
       if (mod && event.altKey && event.shiftKey && event.key.toLowerCase() === 'm') {
@@ -419,16 +512,17 @@ export function MapEditorPage() {
         insertedImage = await attachImageToNode(file, nodeId)
       }
       else if (isPdfFile(file)) {
-        const paperNodeId = useDocumentStore.getState().insertChild(nodeId)
-        if (!paperNodeId) continue
-        useDocumentStore.getState().updateNode(paperNodeId, { title: titleFromPdfFileName(file.name) })
         try {
-          await usePaperStore.getState().uploadAndLink(file, document.id, paperNodeId, userId)
-          openedNodeId = paperNodeId
-          shouldOpenInspector = true
-        } catch {
-          useDocumentStore.getState().remove(paperNodeId)
-          window.alert(`“${file.name}”导入失败，请确认它是有效的 PDF 文件。`)
+          const header = await file.slice(0, 5).text()
+          if (header !== '%PDF-') throw new Error('文件不是有效的 PDF。')
+          const checked = await loadPdfDocument(file)
+          await checked.destroy()
+          const paper = await paperRepository.createOrReuse(file, userId)
+          const paperNode = await paperKnowledgeService.createLiteratureNode(paper, document.id, nodeId)
+          openedNodeId = paperNode.id
+          openPaper(paper.id, undefined, paperNode.id)
+        } catch (reason) {
+          window.alert(`“${file.name}”导入失败：${reason instanceof Error ? reason.message : '请重试。'}`)
         }
       }
       else {
@@ -669,11 +763,11 @@ export function MapEditorPage() {
   const isRoot = selectedNodeId === document.root.id
 
   return (
-    <div className={`editor-shell ${inspectorOpen ? 'with-inspector' : ''} ${presentationMode ? 'presentation-mode' : ''}`} style={inspectorOpen && !presentationMode ? { gridTemplateColumns: `minmax(480px, 1fr) ${inspectorWidth}px` } : undefined}>
+    <div className={`editor-shell ${inspectorOpen && !readingPaper ? 'with-inspector' : ''} ${readingPaper && !presentationMode ? 'with-paper-reader' : ''} ${presentationMode ? 'presentation-mode' : ''}`} style={inspectorOpen && !readingPaper && !presentationMode ? { gridTemplateColumns: `minmax(480px, 1fr) ${inspectorWidth}px` } : undefined}>
       <header className="editor-toolbar">
         <button className="icon-button" onClick={() => navigate('/library')} aria-label="返回知识库" title="返回知识库"><ArrowLeft size={19} /></button>
         <div className="toolbar-divider" />
-        <input className="document-title-input" value={document.title} aria-label="文档名称" disabled={readOnly} onChange={(event) => renameDocument(document.id, event.target.value)} />
+        <DocumentTitleInput className="document-title-input" value={document.title} aria-label="文档名称" disabled={readOnly || presentationMode} onCommit={(title) => renameDocument(document.id, title)} />
         <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(event) => { void attachImage(event.target.files?.[0]); event.target.value = '' }} />
         <div className={`save-status status-${saveStatus}`}>{activeSave.icon}<span>{activeSave.label}</span></div>
         <span className="document-node-count">{countNodes(document.root)} 个节点</span>
@@ -682,6 +776,11 @@ export function MapEditorPage() {
           <button className={editorView === 'mindmap' ? 'active' : ''} onClick={() => changeEditorView('mindmap')} title="思维导图"><Network size={15} /><span>导图</span></button>
         </div>
         <div className="toolbar-spacer" />
+        <button className={`toolbar-action-button ${backlinksOpen && editorView === 'mindmap' ? 'active' : ''}`} aria-label="双向链接与反向引用" title="输入 [[文档名称]]，双击高亮文字打开文档" onClick={() => {
+          if (editorView === 'outline') globalThis.document.querySelector('.outline-document .document-backlinks')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+          else setBacklinksOpen((value) => !value)
+        }}><Link2 size={16} /><span>引用{backlinks.length > 0 ? ` ${backlinks.length}` : ''}</span></button>
+        <button className={`toolbar-action-button ${readingPaper ? 'active' : ''}`} aria-label="分栏阅读论文" title="打开论文分栏 · 也可直接把 PDF 拖到导图" onClick={() => setPaperPickerOpen((value) => !value)}><BookOpen size={16} /><span>论文分栏</span></button>
         <button className="toolbar-action-button add-topic-button" disabled={readOnly} onClick={() => {
           if (!selectedNodeId) setSelectedNode(document.root.id)
           window.setTimeout(() => command('child'), 0)
@@ -724,6 +823,7 @@ export function MapEditorPage() {
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
       </header>
+      {paperPickerOpen && <div className="paper-picker"><strong>左侧论文 · 右侧导图</strong><p>把 PDF 文件直接拖到导图，即可创建文献节点。点击文献节点打开分栏。</p><button onClick={() => navigate('/annotations')}>论文与批注管理 →</button>{papers.map((paper) => <button key={paper.id} onClick={() => openPaper(paper.id)}>📄 {paper.title}</button>)}</div>}
       {breadcrumbs.length > 0 && <div className="focus-breadcrumb"><Focus size={14} />{breadcrumbs.map((node, index) => <span key={node.id}><button onClick={() => index === 0 ? setFocusRoot(undefined) : setFocusRoot(node.id)}>{node.title}</button>{index < breadcrumbs.length - 1 && <ChevronRight size={13} />}</span>)}</div>}
       {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => {
         useDocumentStore.getState().revealNode(result.nodeId)
@@ -752,15 +852,24 @@ export function MapEditorPage() {
             setSelectedNode(nodeId)
             setInspectorOpen(true)
           }}
+          onDropFiles={(files, nodeId) => void attachFiles(files, nodeId)}
+          onOpenPaperNode={(nodeId) => {
+            const relation = nodePaperRelations.find((item) => item.documentId === document.id && item.nodeId === nodeId)
+            if (relation) openPaper(relation.paperId, undefined, nodeId)
+          }}
+          paperNodeIds={nodePaperRelations.filter((item) => item.documentId === document.id).map((item) => item.nodeId)}
           showNumbering={outlineNumbering}
+          readOnly={readOnly || presentationMode}
+          onOpenWikiLink={(name) => void openWikiLink(name)}
+          backlinks={<DocumentLinks document={document} documents={documents} onGoToNode={goToLinkedNode} />}
         /> : <main
           className={`mindmap-stage ${fileDropTargetId ? 'is-file-dragging' : ''} ${isPanning ? 'is-panning' : ''}`}
           tabIndex={0}
           onPointerDownCapture={(event) => {
             const target = event.target as HTMLElement
-            if (!(event.target as HTMLElement).isContentEditable) event.currentTarget.focus({ preventScroll: true })
+            if (!target.closest('[contenteditable="true"]')) event.currentTarget.focus({ preventScroll: true })
             const anchor = adapterRef.current?.resolveNode(target)
-            const blankCanvasPress = event.button === 0
+            const blankCanvasPress = event.pointerType === 'mouse' && event.button === 0
               && !anchor
               && Boolean(target.closest('.mindmap-canvas'))
               && !target.closest('button, input, textarea, select, a, [contenteditable="true"]')
@@ -811,7 +920,7 @@ export function MapEditorPage() {
               return
             }
             if (
-              event.button === 0
+              event.pointerType === 'mouse' && event.button === 0
               && !anchor
               && target.closest('.mindmap-canvas')
               && !target.classList.contains('map-container')
@@ -830,6 +939,10 @@ export function MapEditorPage() {
           }}
           onAuxClickCapture={(event) => { if (event.button === 1) event.preventDefault() }}
           onKeyDownCapture={(event) => {
+            const name = (event.target as HTMLElement).closest<HTMLElement>('[data-wiki-name]')?.dataset.wikiName
+            if (name && event.key === 'Enter' && !(event.target as HTMLElement).closest('[contenteditable="true"]')) {
+              event.preventDefault(); event.stopPropagation(); void openWikiLink(name); return
+            }
             if (event.code === 'Space' && !(event.target as HTMLElement).matches('input, textarea, [contenteditable="true"]')) {
               spacePressedRef.current = true
               event.preventDefault()
@@ -842,6 +955,14 @@ export function MapEditorPage() {
           onCompositionEndCapture={() => { composingRef.current = false }}
           onPasteCapture={(event) => {
             if (readOnly || presentationMode) return
+            const reference = parseAnnotationReference(event.clipboardData.getData('text/plain'))
+            if (reference && !(event.target as HTMLElement).closest('[contenteditable], input, textarea')) {
+              event.preventDefault(); event.stopPropagation()
+              const target = adapterRef.current?.resolveNode(event.target)?.id ?? selectedNodeId
+              if (target) linkToNode(reference, target)
+              else void knowledgeAction(async () => { throw new Error('请先选中目标节点，再粘贴批注引用。') }, '')
+              return
+            }
             const image = [...event.clipboardData.files].find((file) => file.type.startsWith('image/'))
               ?? [...event.clipboardData.items]
                 .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
@@ -871,6 +992,7 @@ export function MapEditorPage() {
           }}
           onDragOverCapture={(event) => {
             if (readOnly || presentationMode) return
+            if (event.dataTransfer.types.includes(ANNOTATION_DRAG_TYPE)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = adapterRef.current?.resolveNode(event.target) ? 'copy' : 'none'; return }
             if (!event.dataTransfer.types.includes('Files')) return
             event.preventDefault()
             event.dataTransfer.dropEffect = 'copy'
@@ -882,6 +1004,14 @@ export function MapEditorPage() {
             if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setFileDropTargetId(undefined)
           }}
           onDropCapture={(event) => {
+            if (readOnly || presentationMode) return
+            if (event.dataTransfer.types.includes(ANNOTATION_DRAG_TYPE)) {
+              event.preventDefault(); event.stopPropagation()
+              const target = adapterRef.current?.resolveNode(event.target)?.id
+              if (target) linkToNode(event.dataTransfer.getData(ANNOTATION_DRAG_TYPE), target)
+              else void knowledgeAction(async () => { throw new Error('请将批注拖到一个节点上，而不是空白画布。') }, '')
+              return
+            }
             if (!event.dataTransfer.files.length) return
             event.preventDefault()
             event.stopPropagation()
@@ -891,6 +1021,26 @@ export function MapEditorPage() {
             void attachFiles(event.dataTransfer.files, targetId)
           }}
           onClickCapture={(event) => {
+            if ((event.target as HTMLElement).closest('[contenteditable], input, textarea, .me-epd')) return
+            if ((event.target as HTMLElement).closest('[data-wiki-name]')) { window.clearTimeout(paperOpenTimerRef.current); return }
+            const badge = (event.target as HTMLElement).closest<HTMLElement>('[data-source-node-id]')
+            if (badge?.dataset.sourceNodeId) {
+              event.preventDefault(); event.stopPropagation(); setSelectedNode(badge.dataset.sourceNodeId)
+              const relation = annotationNodeRelations.find((item) => item.documentId === document.id && item.nodeId === badge.dataset.sourceNodeId)
+              const annotation = paperAnnotations.find((item) => item.id === relation?.annotationId)
+              if (annotation) openPaper(annotation.paperId, annotation.id, badge.dataset.sourceNodeId)
+              return
+            }
+            const paperAnchor = adapterRef.current?.resolveNode(event.target)
+            if (paperAnchor && !event.shiftKey && !event.ctrlKey && !event.metaKey && event.detail < 2) {
+              const paperRelation = nodePaperRelations.find((item) => item.documentId === document.id && item.nodeId === paperAnchor.id && papers.some((paper) => paper.id === item.paperId))
+              if (paperRelation) {
+                const source = annotationNodeRelations.find((item) => item.documentId === document.id && item.nodeId === paperAnchor.id)
+                setSelectedNode(paperAnchor.id)
+                window.clearTimeout(paperOpenTimerRef.current)
+                paperOpenTimerRef.current = window.setTimeout(() => openPaper(paperRelation.paperId, source?.annotationId, paperAnchor.id), 400)
+              }
+            }
             if (event.shiftKey || useSelectionStore.getState().selectedNodeIds.length <= 1) return
             const anchor = adapterRef.current?.resolveNode(event.target)
             if (!anchor) return
@@ -900,6 +1050,17 @@ export function MapEditorPage() {
             adapterRef.current?.setSelections([anchor.id])
           }}
           onDoubleClickCapture={(event) => {
+            window.clearTimeout(paperOpenTimerRef.current)
+            const target = event.target as HTMLElement
+            const editor = target.closest<HTMLElement>('#input-box[contenteditable]')
+            const name = editor ? wikiLinkAtPoint(editor, event.clientX, event.clientY) : target.closest<HTMLElement>('[data-wiki-name]')?.dataset.wikiName
+            if (name) {
+              event.preventDefault(); event.stopPropagation()
+              event.nativeEvent.stopImmediatePropagation()
+              void openWikiLink(name)
+              return
+            }
+            if (editor) return
             if (readOnly || presentationMode) return
             const anchor = adapterRef.current?.resolveNode(event.target)
             if (!anchor) return
@@ -1001,6 +1162,9 @@ export function MapEditorPage() {
           </div>
         </main>}
       </NodeContextMenu>
+      {backlinksOpen && editorView === 'mindmap' && !presentationMode && <DocumentLinks document={document} documents={documents} onGoToNode={goToLinkedNode} overlay onClose={() => setBacklinksOpen(false)} />}
+      {nameError && <div className="document-link-error" role="alert"><span>{nameError}</span><button aria-label="关闭名称提示" onClick={() => useDocumentStore.getState().clearNameError()}>×</button></div>}
+      {ambiguousLink && <div className="wiki-choice-backdrop"><section className="wiki-choice" role="dialog" aria-modal="true" aria-label="选择同名文档"><header><strong>选择「{ambiguousLink}」对应的文档</strong><button className="icon-button" aria-label="关闭文档选择" onClick={() => setAmbiguousLink(undefined)}><X size={16} /></button></header><p>旧资料包含同名文档，请选择目标；可随后重命名以区分。</p>{matchingDocuments(documents, ambiguousLink).map((item) => <button key={item.id} onClick={() => void openWikiLink(ambiguousLink, item.id)}>{item.title}<small>{item.folderId ? useDocumentStore.getState().folders.find((folder) => folder.id === item.folderId)?.name : '未分类'} · {countNodes(item.root)} 个节点 · {new Date(item.updatedAt).toLocaleString()}</small></button>)}</section></div>}
       {editorView === 'mindmap' && selectedNodeId && !presentationMode && !readOnly && <div className="map-selection-toolbar" role="toolbar" aria-label="主题操作">
         <strong>{selectedNodeIds.length > 1 ? `已选 ${selectedNodeIds.length} 项` : selectedNode?.title || '当前主题'}</strong>
         {selectedNodeIds.length === 1 && <>
@@ -1035,7 +1199,13 @@ export function MapEditorPage() {
         }}><Trash2 size={14} />删除</button>}
       </div>}
       {presentationMode && <button className="presentation-exit" onClick={() => setPresentationMode(false)}><X size={16} />退出演示</button>}
-      {inspectorOpen && !readOnly && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} focusNoteRequest={descriptionFocusRequest} /></Suspense></>}
+      {selectedNode && !presentationMode && <NodeSources key={selectedNode.id} documentId={document.id} nodeId={selectedNode.id} nodeTitle={selectedNode.title} onOpen={openPaper} onGoToNode={goToLinkedNode} readOnly={readOnly} />}
+      {readingPaper && !presentationMode && <section className="map-paper-pane" aria-label="分栏论文阅读"><Suspense fallback={<div className="paper-reader-message">正在打开阅读区…</div>}><PaperReaderPage key={readingPaper.paperId} embedded readOnly={readOnly} paperId={readingPaper.paperId} annotationId={readingPaper.annotationId} locationKey={readingPaper.locationKey} documentId={document.id} nodeId={readingPaper.nodeId} autoCreateChildren onCreatedNode={(nodeId) => {
+        setSelectedNode(nodeId)
+        requestAnimationFrame(() => requestAnimationFrame(() => adapterRef.current?.reveal(nodeId)))
+      }} onClose={() => setReadingPaper(undefined)} onGoToNode={goToLinkedNode} /></Suspense></section>}
+      {inspectorOpen && !readingPaper && !readOnly && <><div className="inspector-resizer" role="separator" aria-label="调整详情栏宽度" aria-orientation="vertical" onPointerDown={startInspectorResize} /><Suspense fallback={<aside className="node-inspector"><div className="inspector-empty">正在打开节点详情…</div></aside>}><NodeInspector key={selectedNode?.id ?? 'empty'} node={selectedNode} documentId={document.id} close={() => setInspectorOpen(false)} focusNoteRequest={descriptionFocusRequest} onOpenPaper={openPaper} onOpenWikiLink={(name) => void openWikiLink(name)} /></Suspense></>}
+      <KnowledgeFeedback />
       <HistoryDialog document={document} open={historyOpen} onOpenChange={setHistoryOpen} />
       <ImportMarkdownDialog open={importOpen} onOpenChange={setImportOpen} onImport={importMarkdown} onImportFile={importStructuredFile} />
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
