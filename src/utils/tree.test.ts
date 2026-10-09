@@ -5,7 +5,7 @@ import {
   removeSubtree, splitNode, topLevelSelectedNodes,
 } from './tree'
 import { useDocumentStore } from '../stores/documentStore'
-import { mockDocuments } from '../data/mockDocuments'
+import { testDocuments } from '../../tests/fixtures/documents'
 
 function sample() {
   const root = createNode('Root')
@@ -126,8 +126,8 @@ describe('tree operations', () => {
 
   it('undoes and redoes a committed tree change', () => {
     useDocumentStore.setState({
-      documents: structuredClone(mockDocuments),
-      activeDocumentId: 'research-map',
+      documents: structuredClone(testDocuments),
+      activeDocumentId: 'test-map',
       histories: {},
       clipboard: undefined,
     })
@@ -142,8 +142,8 @@ describe('tree operations', () => {
 
   it('stores graph relations in history and removes dangling links', () => {
     useDocumentStore.setState({
-      documents: structuredClone(mockDocuments),
-      activeDocumentId: 'research-map',
+      documents: structuredClone(testDocuments),
+      activeDocumentId: 'test-map',
       histories: {},
       clipboard: undefined,
     })
@@ -162,8 +162,8 @@ describe('tree operations', () => {
 
   it('creates summaries only for adjacent siblings', () => {
     useDocumentStore.setState({
-      documents: structuredClone(mockDocuments),
-      activeDocumentId: 'research-map',
+      documents: structuredClone(testDocuments),
+      activeDocumentId: 'test-map',
       histories: {},
       clipboard: undefined,
     })

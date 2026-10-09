@@ -1,8 +1,10 @@
 // Read-only UI smoke check of the installed app. Never creates or restores documents.
 import { _electron as electron, expect } from '@playwright/test'
 import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 
 const executablePath = process.argv[2]
+const expectedVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
 if (!executablePath || !path.isAbsolute(executablePath)) throw new Error('Supply the absolute installed EXE path')
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
@@ -11,7 +13,7 @@ try {
   const info = await app.evaluate(({ app: running }) => ({
     version: running.getVersion(), userData: running.getPath('userData'),
   }))
-  expect(info.version).toBe('1.6.0')
+  expect(info.version).toBe(expectedVersion)
   const page = await app.firstWindow()
   await expect(page.getByRole('button', { name: '新建思维导图' })).toBeVisible()
   // The app displays this button only after local data hydration completes.
@@ -33,14 +35,14 @@ try {
       })))
     } finally { db.close() }
   })
-  await page.screenshot({ path: 'release/installed-1.6.0-library.png' })
+  await page.screenshot({ path: `release/installed-${expectedVersion}-library.png` })
   // Open existing content for visual verification; no title or node edits.
   const firstDocument = page.locator('.document-card, .document-row').first()
   if (await firstDocument.count()) {
     await firstDocument.click()
     await expect(page.getByLabel('文档名称', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '双向链接与反向引用' })).toBeVisible()
-    await page.screenshot({ path: 'release/installed-1.6.0-existing-document.png' })
+    await page.screenshot({ path: `release/installed-${expectedVersion}-existing-document.png` })
   }
   console.log(JSON.stringify({ ...info, visible: true, counts }))
 } finally { await app.close() }

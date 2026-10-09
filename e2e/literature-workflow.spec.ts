@@ -1,8 +1,8 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { createTestPdf } from './testPdf'
 
-async function dropPdf(page: Page, title = 'Literature', target = 'BEV', bytes = createTestPdf()) {
-  await page.goto('/map/research-map')
+async function dropPdf(page: Page, title = 'Literature', target = '子项甲三', bytes = createTestPdf()) {
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   const topic = page.locator('.me-tpc', { hasText: target }).first()
   await expect(topic).toBeVisible()
@@ -44,7 +44,7 @@ test('highlight, underline and note automatically create sibling evidence under 
   await dropPdf(page)
   const literature = page.locator('.me-tpc', { hasText: 'Literature' }).first()
   // Selection elsewhere must not change where new evidence is inserted.
-  await page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first().click()
+  await page.locator('.me-tpc', { hasText: '分支甲项' }).first().click()
   await selectText(page)
   await page.getByRole('button', { name: '高亮', exact: true }).click()
   await expect(page.locator('.me-tpc', { hasText: 'ResearchMind first page' })).toHaveCount(1)
@@ -63,7 +63,7 @@ test('highlight, underline and note automatically create sibling evidence under 
   await expect(literature).toBeVisible()
   const durableChildren = await page.evaluate(async () => {
     const { appDatabase } = await import('/src/db/appDatabase.ts' as string)
-    const saved = await appDatabase.documents.get('research-map')
+    const saved = await appDatabase.documents.get('test-map')
     const find = (node: { title: string; children: typeof node[] }): typeof node | undefined => node.title === 'Literature' ? node : node.children.map(find).find(Boolean)
     return find(saved.root)?.children.map((node) => node.title)
   })
@@ -109,10 +109,10 @@ test('area highlights create one illustrated child, and reselecting does not dup
 })
 
 test('a corrupt dropped PDF leaves no empty paper node', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   page.once('dialog', (dialog) => dialog.accept())
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().evaluate((node) => {
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().evaluate((node) => {
     const transfer = new DataTransfer(); transfer.items.add(new File(['not a PDF'], 'Broken.pdf', { type: 'application/pdf' }))
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   })
@@ -122,7 +122,7 @@ test('a corrupt dropped PDF leaves no empty paper node', async ({ page }) => {
 
 test('multi-line partial underlines create only text-sized lines, not whole span boxes', async ({ page }) => {
   const bytes = createTestPdf('BT /F1 18 Tf 72 720 Td (First selected line here) Tj 0 -30 Td (Second selected line here) Tj ET')
-  await dropPdf(page, 'Multiline', 'BEV', bytes)
+  await dropPdf(page, 'Multiline', '子项甲三', bytes)
   const layer = page.locator('.embedded-reader .textLayer')
   await layer.evaluate((node) => {
     const spans = node.querySelectorAll('span')
@@ -178,7 +178,7 @@ test('rectangle highlight fills the entire region, extracts its text and survive
 })
 
 test('rectangle highlight works without a text layer and Escape cancels without saving', async ({ page }) => {
-  await dropPdf(page, 'Scanned', 'BEV', createTestPdf('0.8 0.8 0.8 rg 72 650 240 70 re f'))
+  await dropPdf(page, 'Scanned', '子项甲三', createTestPdf('0.8 0.8 0.8 rg 72 650 240 70 re f'))
   const reader = page.locator('.embedded-reader')
   await reader.getByRole('button', { name: '矩形高亮', exact: true }).click()
   let bounds = (await reader.locator('.pdf-area-selector').boundingBox())!
@@ -229,7 +229,7 @@ test('legacy oversize fragmented boxes are reanchored to exact text without rewr
 })
 
 test('identical quotations stay anchored to the selected occurrence after reload', async ({ page }) => {
-  await dropPdf(page, 'Repeated', 'BEV', createTestPdf('BT /F1 18 Tf 72 720 Td (Repeat phrase) Tj 0 -60 Td (Repeat phrase) Tj ET'))
+  await dropPdf(page, 'Repeated', '子项甲三', createTestPdf('BT /F1 18 Tf 72 720 Td (Repeat phrase) Tj 0 -60 Td (Repeat phrase) Tj ET'))
   await page.locator('.embedded-reader .textLayer span', { hasText: 'Repeat phrase' }).nth(1).evaluate((node) => {
     const range = document.createRange(); range.selectNodeContents(node)
     const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range)

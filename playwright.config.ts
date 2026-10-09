@@ -9,12 +9,12 @@ export default defineConfig({
   retries: 0,
   reporter: 'line',
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: true,
+    command: 'npm run dev -- --host 127.0.0.1 --port 5176 --strictPort',
+    url: 'http://127.0.0.1:5176',
+    reuseExistingServer: false,
   },
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5176',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

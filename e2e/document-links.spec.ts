@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from './fixtures'
 
 async function newDocument(page: Page, title: string) {
   if (await page.getByRole('button', { name: '返回知识库', exact: true }).count()) await page.getByRole('button', { name: '返回知识库', exact: true }).click()
@@ -167,7 +167,10 @@ test('removing a reference updates backlinks and undo restores the reference', a
   await page.getByRole('region', { name: '文档反向引用' }).first().getByRole('button', { name: /可撤销的引用/ }).click()
   await expect(page).toHaveURL(new RegExp(sourceUrl.split('/').at(-1)!))
   const input = page.getByRole('textbox', { name: '主题内容', exact: true })
+  // Backlink navigation focuses the source on the next animation frames.
+  await expect(input).toBeFocused()
   await input.fill('已取消引用')
+  await expect(input).toHaveText('已取消引用')
   await page.getByLabel('文档名称', { exact: true }).click()
   await expect(page.locator('.save-status')).toContainText('已保存到本地')
   await page.getByRole('button', { name: '返回知识库', exact: true }).click()

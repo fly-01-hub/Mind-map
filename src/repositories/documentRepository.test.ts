@@ -5,6 +5,35 @@ import { documentRepository } from './documentRepository'
 import { createNode } from '../utils/tree'
 import type { MindMapDocument } from '../types/mindmap'
 
+describe('empty public installation', () => {
+  beforeEach(async () => {
+    await appDatabase.transaction('rw', appDatabase.tables, async () => {
+      for (const table of appDatabase.tables) await table.clear()
+    })
+  })
+
+  it('initializes an empty database without sample documents or folders', async () => {
+    await documentRepository.initialize()
+    await documentRepository.initialize()
+    for (const table of appDatabase.tables.filter((table) => table.name !== 'meta')) {
+      expect(await table.count(), table.name).toBe(0)
+    }
+    expect(await appDatabase.meta.get('initialized')).toBeDefined()
+  })
+
+  it('preserves existing documents, folders and attachments even without the initialization flag', async () => {
+    const root = createNode('用户自行创建的内容')
+    const document: MindMapDocument = { id: 'existing', title: root.title, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+    await appDatabase.documents.put(document)
+    await appDatabase.folders.put({ id: 'existing-folder', name: '用户文件夹', order: 0, createdAt: root.createdAt, updatedAt: root.updatedAt })
+    await appDatabase.attachmentBlobs.put({ id: 'existing-attachment', documentId: document.id, nodeId: root.id, blob: new Blob(['retained']), createdAt: root.createdAt })
+    await documentRepository.initialize()
+    expect(await appDatabase.documents.toArray()).toEqual([document])
+    expect(await appDatabase.folders.count()).toBe(1)
+    expect(await appDatabase.attachmentBlobs.count()).toBe(1)
+  })
+})
+
 describe('document batch persistence', () => {
   beforeEach(async () => { await appDatabase.documents.clear() })
   it('rolls back every document in a rename batch if any record cannot be written', async () => {

@@ -279,7 +279,7 @@ export function LibraryPage() {
         <section className={viewMode === 'grid' ? 'document-grid' : 'document-list'}>
           {viewMode === 'list' && <div className="document-list-head"><span>名称</span><span>文件夹</span><span>最近修改</span><span /></div>}
           {visibleDocuments.map((document) => <DocumentRow key={document.id} document={document} folders={folders} inTrash={filter === 'trash'} open={open} viewMode={viewMode} />)}
-          {!visibleDocuments.length && <div className="empty-state"><Search size={24} /><strong>{filter === 'trash' ? '回收站是空的' : query ? '没有找到相关内容' : '这里还没有思维导图'}</strong><span>{filter === 'trash' ? '删除的文档会暂存在这里' : query ? '试试更短的关键词，或按 Esc 清空搜索' : '创建第一份导图，开始整理你的想法'}</span>{filter !== 'trash' && !query && <button className="secondary-button" onClick={create}><Plus size={15} />新建思维导图</button>}</div>}
+          {!visibleDocuments.length && <div className="empty-state"><Search size={24} /><strong>{filter === 'trash' ? '回收站是空的' : query ? '没有找到相关内容' : '这里还没有思维导图'}</strong><span>{filter === 'trash' ? '删除的文档会暂存在这里' : query ? '试试更短的关键词，或按 Esc 清空搜索' : '创建第一份导图，开始整理你的想法'}</span>{filter !== 'trash' && !query && <button className="secondary-button" onClick={create}><Plus size={15} />创建第一份导图</button>}</div>}
         </section>
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { createTestPdf } from './testPdf'
 
 test('opens a PDF, searches, changes page and restores reading progress', async ({ page }) => {
@@ -6,9 +6,9 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().click()
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await page.locator('input[accept="application/pdf,.pdf"]').setInputFiles({
     name: 'ResearchMind Reader Test.pdf',
@@ -88,7 +88,7 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   const generatedAnnotation = page.locator('.paper-annotation-list article').first()
   await expect(generatedAnnotation.getByText('关联节点：Generated Research Insight')).toBeVisible()
   await generatedAnnotation.getByRole('button', { name: '打开已生成节点 Generated Research Insight' }).click()
-  await expect(page).toHaveURL(/\/map\/research-map\?nodeId=/)
+  await expect(page).toHaveURL(/\/map\/test-map\?nodeId=/)
   await expect(page.locator('.me-tpc', { hasText: 'Generated Research Insight' })).toBeVisible()
   await expect(page.locator('.node-inspector > header strong')).toHaveText('Generated Research Insight')
 

@@ -40,6 +40,22 @@ android/app/src/main/assets/web/
 *.apk
 *.aab
 *.researchmind
+# Personal database profiles, attachments and exported mind maps
+IndexedDB/
+Local Storage/
+ResearchMind-data-before-*/
+*-manifest.json
+*.sqlite
+*.sqlite3
+*.db
+*.ldb
+*.pdf
+*.xmind
+*.opml
+*.mm
+*.pem
+*.pfx
+*.p12
 .env
 .env.*
 !.env.example

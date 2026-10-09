@@ -1,18 +1,11 @@
 import { appDatabase } from '../db/appDatabase'
-import { mockDocuments } from '../data/mockDocuments'
 import type { DocumentVersion, FolderData, MindMapDocument } from '../types/mindmap'
-
-const initialFolders: FolderData[] = [
-  { id: 'research', name: '科研资料', order: 0, createdAt: '2026-09-18T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' },
-  { id: 'writing', name: '创作计划', order: 1, createdAt: '2026-09-18T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' },
-]
 
 export const documentRepository = {
   async initialize() {
     const initialized = await appDatabase.meta.get('initialized')
     if (!initialized) {
-      if (await appDatabase.documents.count() === 0) await appDatabase.documents.bulkPut(structuredClone(mockDocuments))
-      if (await appDatabase.folders.count() === 0) await appDatabase.folders.bulkPut(initialFolders)
+      // Fresh installations start empty. Existing records are never seeded or cleared.
       await appDatabase.meta.put({ key: 'initialized', value: new Date().toISOString() })
     }
   },

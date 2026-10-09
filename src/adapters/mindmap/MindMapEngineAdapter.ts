@@ -9,6 +9,7 @@ import type { MapArrow, MapSummary, MindMapDocument, NodeData, NodeStyle, TaskSt
 import { downloadBlob } from '../../services/export/download'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
 import { clearWikiEditor, decorateWikiLinks, highlightWikiEditor } from '../../utils/wikiLinks'
+import { minimalViewportPan } from '../../utils/viewportPan'
 
 interface EngineMetadata {
   createdAt: string
@@ -68,6 +69,10 @@ export class MindMapEngineAdapter {
   private refreshing = false
   private sourceCounts: Record<string, number> = {}
   private documents: MindMapDocument[] = []
+  private readonly host: HTMLElement
+  private stopEditVisibility?: () => void
+  private viewportResize: ResizeObserver
+  private viewportResizeFrame = 0
 
   setDocuments(documents: MindMapDocument[]) {
     this.documents = documents
@@ -84,6 +89,7 @@ export class MindMapEngineAdapter {
   }
 
   constructor(element: HTMLElement, events: AdapterEvents) {
+    this.host = element
     this.events = events
     this.engine = new MindElixir<EngineMetadata>({
       el: element,
@@ -98,6 +104,33 @@ export class MindMapEngineAdapter {
       alignment: 'nodes',
       theme: mapThemes.paper,
     })
+
+    // Engine pointer selection calls scrollIntoView and recentres edge topics.
+    // Selection is not navigation. Only explicit reveal retains that behaviour;
+    // inline editing uses our minimal, viewport-aware pan below instead.
+    const engineReveal = this.engine.scrollIntoView.bind(this.engine)
+    this.engine.scrollIntoView = (target, forceCenter = false) => {
+      if (forceCenter) engineReveal(target, true)
+    }
+    this.viewportResize = new ResizeObserver(() => {
+      cancelAnimationFrame(this.viewportResizeFrame)
+      this.viewportResizeFrame = requestAnimationFrame(() => {
+        if (this.disposed) return
+        const editor = this.host.querySelector<HTMLElement>('#input-box[contenteditable]')
+        if (editor) this.keepContentVisible(editor)
+        else if (this.engine.currentNode) {
+          const rect = this.engine.currentNode.getBoundingClientRect()
+          const host = this.host.getBoundingClientRect()
+          // Selection may change toolbar/header size. Do not turn that into
+          // an auto-pan for a visible or partially visible clicked topic.
+          if (rect.bottom < host.top || rect.top > Math.min(host.bottom, innerHeight)
+            || rect.right < Math.max(host.left, 0) || rect.left > Math.min(host.right, innerWidth)) {
+            this.keepContentVisible(this.engine.currentNode)
+          }
+        }
+      })
+    })
+    this.viewportResize.observe(this.host)
 
     this.engine.bus.addListener('selectNodes', () => {
       if (!this.refreshing) events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id))
@@ -129,13 +162,25 @@ export class MindMapEngineAdapter {
   }
 
   render(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
-    if (this.disposed) return
+    if (this.disposed || !this.engine.nodeData) return
     const selection = this.engine.currentNodes.map((node) => node.nodeObj.id)
+    const anchor = this.captureLayoutAnchor()
+    const rootChanged = this.engine.nodeData.id !== root.id
     this.refreshing = true
     try {
       this.engine.refresh(this.toEngineData(root, arrows, summaries))
       this.applyRichText()
-      requestAnimationFrame(() => this.applyRichText())
+      // Replacing the displayed tree (import / focus navigation) is deliberate
+      // navigation. Its old anchor no longer exists and must not strand the
+      // new root off-screen. Ordinary edits keep the existing screen anchor.
+      if (rootChanged) this.engine.toCenter()
+      else this.restoreLayoutAnchor(anchor)
+      requestAnimationFrame(() => {
+        if (this.disposed) return
+        const currentAnchor = this.captureLayoutAnchor()
+        this.applyRichText()
+        this.restoreLayoutAnchor(currentAnchor)
+      })
       if (selection.length) this.setSelections(selection)
     } finally {
       this.refreshing = false
@@ -143,6 +188,9 @@ export class MindMapEngineAdapter {
   }
 
   destroy() {
+    this.stopEditVisibility?.()
+    this.viewportResize.disconnect()
+    cancelAnimationFrame(this.viewportResizeFrame)
     const editor = this.engine.nodes.querySelector<HTMLElement>('#input-box[contenteditable]')
     if (editor) clearWikiEditor(editor)
     this.disposed = true
@@ -153,8 +201,12 @@ export class MindMapEngineAdapter {
     const element = this.safeFind(id)
     if (!element) return
     void this.engine.beginEdit(element).then(() => {
+      if (this.disposed) return
       const input = this.engine.nodes.querySelector<HTMLElement>('#input-box')
       if (!input) return
+      input.dataset.editingNodeId = id
+      this.stopEditVisibility?.()
+      this.stopEditVisibility = this.watchEditVisibility(input)
       const metadata = element.nodeObj.metadata ?? defaultMetadata()
       const originalRichText = metadata.richText
       let cancelled = false
@@ -175,6 +227,14 @@ export class MindMapEngineAdapter {
         if (event.key === 'Escape') cancelled = true
       }, { capture: true })
       input.addEventListener('blur', () => {
+        const anchor = this.captureLayoutAnchor(id)
+        this.stopEditVisibility?.()
+        this.stopEditVisibility = undefined
+        // The engine commits and reflows in its non-capture blur listener.
+        // Preserve the edited topic's top-left, not the whole map's centre.
+        queueMicrotask(() => {
+          if (!this.disposed) this.restoreLayoutAnchor(anchor)
+        })
         clearWikiEditor(input)
         if (cancelled) metadata.richText = originalRichText
         else {
@@ -200,7 +260,7 @@ export class MindMapEngineAdapter {
         return
       }
       requestAnimationFrame(() => {
-        input.focus()
+        input.focus({ preventScroll: true })
         const caretDocument = document as Document & {
           caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
           caretRangeFromPoint?: (x: number, y: number) => Range | null
@@ -236,6 +296,10 @@ export class MindMapEngineAdapter {
   setSelections(ids: string[]) {
     this.engine.currentNodes.forEach((node) => node.classList.remove('selected'))
     const nodes = ids.map((id) => this.safeFind(id)).filter((node): node is Topic<EngineMetadata> => Boolean(node))
+    // Refresh replaces topic elements. Keep the engine's selection-area cache
+    // in sync as well, so adding a child cannot retain the old parent selection.
+    this.engine.selection?.clearSelection(true, true)
+    this.engine.selection?.select(nodes, true)
     nodes.forEach((node) => node.classList.add('selected'))
     this.engine.currentNodes = nodes
   }
@@ -255,8 +319,18 @@ export class MindMapEngineAdapter {
   }
 
   setAppearance(theme: 'paper' | 'ocean' | 'warm' | 'mono', compact: boolean) {
-    this.engine.changeTheme(mapThemes[theme], true)
-    this.engine.changeCompact(compact)
+    const selection = this.engine.currentNodes.map((node) => node.nodeObj.id)
+    const anchor = this.captureLayoutAnchor()
+    this.refreshing = true
+    try {
+      this.engine.changeTheme(mapThemes[theme], true)
+      this.engine.changeCompact(compact)
+      this.applyRichText()
+      this.restoreLayoutAnchor(anchor)
+      this.setSelections(selection)
+    } finally {
+      this.refreshing = false
+    }
   }
 
   setReadOnly(readOnly: boolean) {
@@ -369,11 +443,61 @@ export class MindMapEngineAdapter {
   anchorFor(id: string): NodeAnchor | undefined {
     const element = this.safeFind(id)
     if (!element) return
-    const rect = element.getBoundingClientRect()
+    // The engine hides the original topic while a separate, auto-sized editor
+    // is active. Measuring that old topic places the controls over new text.
+    const editor = this.engine.nodes.querySelector<HTMLElement>('#input-box[contenteditable]')
+    const rect = (editor?.dataset.editingNodeId === id ? editor : element).getBoundingClientRect()
     return {
       id, left: rect.left, top: rect.top, width: rect.width, height: rect.height,
       hasChildren: Boolean(element.nodeObj.children?.length),
       collapsed: element.nodeObj.expanded === false,
+    }
+  }
+
+  watchAnchor(id: string, onChange: (anchor: NodeAnchor | undefined) => void) {
+    let frame = 0
+    let stopped = false
+    let topic: HTMLElement | undefined
+    let editor: HTMLElement | null = null
+    const schedule = () => {
+      if (stopped || frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        if (!this.disposed) onChange(this.anchorFor(id))
+      })
+    }
+    const resize = new ResizeObserver(schedule)
+    const bind = () => {
+      const nextTopic = this.safeFind(id)
+      const nextEditor = this.host.querySelector<HTMLElement>('#input-box[contenteditable]')
+      if (topic !== nextTopic || editor !== nextEditor) {
+        resize.disconnect()
+        resize.observe(this.host)
+        if (nextTopic) resize.observe(nextTopic)
+        if (nextEditor) resize.observe(nextEditor)
+        topic = nextTopic
+        editor = nextEditor
+      }
+      schedule()
+    }
+    // Includes editor creation/removal, re-layout and map transforms (zoom/pan).
+    // Batch measurements once per changed frame, with no idle polling or writes
+    // to the contenteditable DOM / caret / document data.
+    const mutations = new MutationObserver(bind)
+    mutations.observe(this.host, {
+      subtree: true, childList: true, characterData: true, attributes: true,
+      attributeFilter: ['style', 'class', 'data-editing-node-id'],
+    })
+    window.addEventListener('resize', schedule)
+    window.addEventListener('scroll', schedule, true)
+    bind()
+    return () => {
+      stopped = true
+      cancelAnimationFrame(frame)
+      resize.disconnect()
+      mutations.disconnect()
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('scroll', schedule, true)
     }
   }
 
@@ -392,6 +516,90 @@ export class MindMapEngineAdapter {
 
   private safeFind(id: string): Topic<EngineMetadata> | undefined {
     try { return this.engine.findEle(id) } catch { return undefined }
+  }
+
+  private captureLayoutAnchor(id = this.engine.currentNode?.nodeObj.id ?? this.engine.nodeData?.id) {
+    if (!id || this.disposed) return undefined
+    const rect = this.safeFind(id)?.getBoundingClientRect()
+    return rect ? { id, left: rect.left, top: rect.top } : undefined
+  }
+
+  private restoreLayoutAnchor(anchor?: { id: string; left: number; top: number }) {
+    if (!anchor) return
+    const rect = this.safeFind(anchor.id)?.getBoundingClientRect()
+    if (rect && (Math.abs(anchor.left - rect.left) > .01 || Math.abs(anchor.top - rect.top) > .01)) {
+      this.panBy(anchor.left - rect.left, anchor.top - rect.top)
+    }
+  }
+
+  private watchEditVisibility(input: HTMLElement) {
+    let frame = 0
+    const schedule = () => {
+      if (frame || this.disposed) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        if (!this.disposed && input.isConnected) this.keepContentVisible(input)
+      })
+    }
+    const resize = new ResizeObserver(schedule)
+    resize.observe(input)
+    input.addEventListener('input', schedule)
+    input.addEventListener('keyup', schedule)
+    input.addEventListener('compositionend', schedule)
+    window.visualViewport?.addEventListener('resize', schedule)
+    window.addEventListener('resize', schedule)
+    schedule()
+    return () => {
+      cancelAnimationFrame(frame)
+      resize.disconnect()
+      input.removeEventListener('input', schedule)
+      input.removeEventListener('keyup', schedule)
+      input.removeEventListener('compositionend', schedule)
+      window.visualViewport?.removeEventListener('resize', schedule)
+      window.removeEventListener('resize', schedule)
+    }
+  }
+
+  private keepContentVisible(input: HTMLElement) {
+    const host = this.host.getBoundingClientRect()
+    const visual = window.visualViewport
+    const viewport = {
+      left: Math.max(host.left, visual?.offsetLeft ?? 0) + 16,
+      top: Math.max(host.top, visual?.offsetTop ?? 0) + 16,
+      right: Math.min(host.right, (visual?.offsetLeft ?? 0) + (visual?.width ?? innerWidth)) - 16,
+      bottom: Math.min(host.bottom, (visual?.offsetTop ?? 0) + (visual?.height ?? innerHeight)) - 16,
+    }
+    const toolbar = this.host.closest('.editor-body')?.querySelector('.map-selection-toolbar')
+      ?? document.querySelector('.map-selection-toolbar')
+    const toolbarRect = toolbar?.getBoundingClientRect()
+    if (toolbarRect && toolbarRect.width && toolbarRect.top > viewport.top) {
+      viewport.bottom = Math.min(viewport.bottom, toolbarRect.top - 12)
+    }
+    const rect = input.getBoundingClientRect()
+    let target = { left: rect.left, top: rect.top, right: rect.right + 40, bottom: rect.bottom }
+    // A very long topic cannot fit as a whole: follow the insertion point on
+    // that axis instead. Never alter the DOM, selection, IME or zoom here.
+    const selection = window.getSelection()
+    if (selection?.rangeCount && input.contains(selection.focusNode)) {
+      const caret = document.createRange()
+      caret.setStart(selection.focusNode!, selection.focusOffset)
+      caret.collapse(true)
+      let caretRect = caret.getBoundingClientRect()
+      if (!caretRect.height && selection.focusNode?.nodeType === Node.TEXT_NODE && selection.focusOffset > 0) {
+        caret.setStart(selection.focusNode, selection.focusOffset - 1)
+        caretRect = caret.getBoundingClientRect()
+      }
+      if (caretRect.height) {
+        if (target.right - target.left > viewport.right - viewport.left) {
+          target = { ...target, left: caretRect.left, right: caretRect.right + 12 }
+        }
+        if (target.bottom - target.top > viewport.bottom - viewport.top) {
+          target = { ...target, top: caretRect.top, bottom: caretRect.bottom }
+        }
+      }
+    }
+    const delta = minimalViewportPan(target, viewport)
+    if (Math.abs(delta.x) > .5 || Math.abs(delta.y) > .5) this.panBy(delta.x, delta.y)
   }
 
   private applyRichText() {

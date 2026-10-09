@@ -13,6 +13,9 @@ import { useSelectionStore } from '../../stores/selectionStore'
 import { useUiStore } from '../../stores/uiStore'
 import { countNodes, findNode, findParent, getBreadcrumbs } from '../../utils/tree'
 import { NodeContextMenu, type NodeCommand } from './NodeContextMenu'
+import { MindMapTextToolbar } from './MindMapTextToolbar'
+import { NodeOrderMenu } from './NodeOrderMenu'
+import type { NodeOrderAction } from '../../utils/nodeOrder'
 import { HistoryDialog, ImportMarkdownDialog } from './EditorDialogs'
 import { attachmentRepository } from '../../repositories/attachmentRepository'
 import { isPdfFile, paperRepository } from '../../repositories/paperRepository'
@@ -31,7 +34,7 @@ import { OutlineEditor } from '../outline/OutlineEditor'
 import type { NodeData } from '../../types/mindmap'
 import { NodeSources } from '../paper/NodeSources'
 import { KnowledgeFeedback } from '../paper/knowledgeFeedback'
-import { knowledgeAction } from '../../stores/knowledgeFeedbackStore'
+import { knowledgeAction, useKnowledgeFeedbackStore } from '../../stores/knowledgeFeedbackStore'
 import { ANNOTATION_DRAG_TYPE, paperKnowledgeService, parseAnnotationReference } from '../../services/paper/paperKnowledgeService'
 import { flushLocalPersistence } from '../../services/persistence/localPersistence'
 import { findBacklinks, matchingDocuments, wikiLinkAtPoint } from '../../utils/wikiLinks'
@@ -88,6 +91,7 @@ export function MapEditorPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [orderMenuOpen, setOrderMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [fileDropTargetId, setFileDropTargetId] = useState<string>()
   const [relationPickerOpen, setRelationPickerOpen] = useState(false)
@@ -353,8 +357,11 @@ export function MapEditorPage() {
       adapterRef.current?.setSelections(selectedNodeIds)
       return
     }
-    if (selectedNodeId) requestAnimationFrame(() => adapterRef.current?.select(selectedNodeId))
-    else adapterRef.current?.clearSelection()
+    if (selectedNodeId) {
+      const frame = requestAnimationFrame(() => adapterRef.current?.select(selectedNodeId))
+      return () => cancelAnimationFrame(frame)
+    }
+    adapterRef.current?.clearSelection()
   }, [engineReady, selectedNodeId, selectedNodeIds])
 
   useEffect(() => {
@@ -372,16 +379,53 @@ export function MapEditorPage() {
   }, [engineReady, id, targetNodeId, viewRoot])
 
   useEffect(() => {
-    const update = () => selectedNodeId && setNodeAnchor(adapterRef.current?.anchorFor(selectedNodeId))
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [selectedNodeId])
+    if (engineReady && editorView === 'mindmap') {
+      setNodeAnchor(selectedNodeId ? adapterRef.current?.anchorFor(selectedNodeId) : undefined)
+    }
+  }, [editorView, engineReady, selectedNodeId])
+
+  useEffect(() => {
+    const anchorId = nodeAnchor?.id
+    if (!engineReady || editorView !== 'mindmap' || !anchorId) return
+    return adapterRef.current?.watchAnchor(anchorId, (next) => {
+      setNodeAnchor((previous) => {
+        if (previous?.id !== anchorId) return previous
+        if (next && previous.left === next.left && previous.top === next.top
+          && previous.width === next.width && previous.height === next.height
+          && previous.hasChildren === next.hasChildren && previous.collapsed === next.collapsed) return previous
+        return next
+      })
+    })
+  }, [editorView, engineReady, nodeAnchor?.id])
 
   const editNewNode = useCallback((nodeId?: string) => {
     if (!nodeId) return
     if (editorView === 'mindmap') pendingEditRef.current = nodeId
     setSelectedNode(nodeId)
   }, [editorView, setSelectedNode])
+
+  const moveSelectedSibling = useCallback(async (action: NodeOrderAction) => {
+    if (readOnly || presentationMode) return
+    const selection = useSelectionStore.getState()
+    const ids = [...selection.selectedNodeIds]
+    const activeId = selection.selectedNodeId
+    const documentId = useDocumentStore.getState().activeDocumentId
+    if (!activeId || !ids.length) return
+    adapterRef.current?.finishEdit()
+    const active = globalThis.document.activeElement
+    if (active instanceof HTMLElement && active.isContentEditable) active.blur()
+    // Read the latest committed tree, not a render snapshot of unfinished text.
+    await Promise.resolve()
+    if (useDocumentStore.getState().activeDocumentId !== documentId) return
+    const result = useDocumentStore.getState().reorderSiblings(ids, action)
+    if (result === 'summary-conflict') useKnowledgeFeedbackStore.setState({
+      message: '此次排序会拆散已有概要，已保留原顺序。请同时选择概要中的全部同级主题再移动。', error: true, undo: undefined, busy: false,
+    })
+    if (result === 'moved') {
+      setSelectedNodes(ids, activeId)
+      adapterRef.current?.setSelections(ids)
+    }
+  }, [presentationMode, readOnly, setSelectedNodes])
 
   const command = useCallback((name: NodeCommand) => {
     const store = useDocumentStore.getState()
@@ -393,6 +437,8 @@ export function MapEditorPage() {
       case 'child': editNewNode(store.insertChild(selection)); break
       case 'sibling': editNewNode(store.insertSibling(selection)); break
       case 'promote': store.promote(selection); break
+      case 'order': window.setTimeout(() => setOrderMenuOpen(true), 0); break
+      case 'moveUp': case 'moveDown': case 'moveFirst': case 'moveLast': void moveSelectedSibling(name); break
       case 'remove': if (selection !== currentDocument.root.id) { store.remove(selection); setSelectedNode(undefined) } break
       case 'removeOnly': if (selection !== currentDocument.root.id) { store.removeOnly(selection); setSelectedNode(undefined) } break
       case 'duplicate': editNewNode(store.duplicate(selection)); break
@@ -404,7 +450,7 @@ export function MapEditorPage() {
       case 'focus': setFocusRoot(selection); break
       default: setInspectorOpen(true)
     }
-  }, [editNewNode, editorView, presentationMode, readOnly, setFocusRoot, setInspectorOpen, setSelectedNode])
+  }, [editNewNode, editorView, moveSelectedSibling, presentationMode, readOnly, setFocusRoot, setInspectorOpen, setSelectedNode])
 
   const changeEditorView = (view: 'outline' | 'mindmap') => {
     setEditorView(view)
@@ -567,29 +613,6 @@ export function MapEditorPage() {
     adapterRef.current?.setSelections(ids)
   }
 
-  const moveSelectedSibling = (direction: -1 | 1) => {
-    if (!document || !selectedNodeId) return
-    const ids = useSelectionStore.getState().selectedNodeIds
-    const matches = ids.map((nodeId) => ({ nodeId, match: findParent(document.root, nodeId) })).filter((item) => item.match)
-    if (!matches.length) return
-    const parentId = matches[0].match!.parent.id
-    if (matches.some((item) => item.match!.parent.id !== parentId)) return
-    const parent = matches[0].match!.parent
-    const selected = new Set(ids)
-    const indexes = matches.map((item) => item.match!.index).sort((a, b) => a - b)
-    let targetIndex = direction < 0 ? indexes[0] - 1 : indexes.at(-1)! + 1
-    while (targetIndex >= 0 && targetIndex < parent.children.length && selected.has(parent.children[targetIndex].id)) targetIndex += direction
-    const target = parent.children[targetIndex]
-    if (!target) return
-    if (ids.length > 1) {
-      useDocumentStore.getState().moveManyRelative(ids, target.id, direction < 0 ? 'before' : 'after')
-      setSelectedNodes(ids, selectedNodeId)
-    } else {
-      useDocumentStore.getState().moveRelative(selectedNodeId, target.id, direction < 0 ? 'before' : 'after')
-      setSelectedNode(selectedNodeId)
-    }
-  }
-
   const showBranchDepth = (levels: number) => {
     if (!document || !selectedNodeId) return
     const branch = findNode(document.root, selectedNodeId)
@@ -724,8 +747,8 @@ export function MapEditorPage() {
     if (mod && event.shiftKey && event.key.toLowerCase() === 'l') { event.preventDefault(); updateSelected((node) => ({ taskStatus: node.taskStatus === 'none' ? 'todo' : 'none' })); return }
     if (mod && event.shiftKey && event.key.toLowerCase() === 'k') { event.preventDefault(); updateSelected((node) => ({ taskStatus: node.taskStatus === 'done' ? 'todo' : 'done' })); return }
     if (mod && event.shiftKey && event.key === 'Backspace') { event.preventDefault(); useDocumentStore.getState().removeMany(selectedNodeIds); setSelectedNode(undefined); return }
-    if (mod && event.shiftKey && event.key === 'ArrowUp') { event.preventDefault(); moveSelectedSibling(-1); return }
-    if (mod && event.shiftKey && event.key === 'ArrowDown') { event.preventDefault(); moveSelectedSibling(1); return }
+    if (mod && event.shiftKey && event.key === 'ArrowUp') { event.preventDefault(); void moveSelectedSibling('moveUp'); return }
+    if (mod && event.shiftKey && event.key === 'ArrowDown') { event.preventDefault(); void moveSelectedSibling('moveDown'); return }
     if (event.shiftKey && event.key === 'ArrowUp') { event.preventDefault(); extendSelection(-1); return }
     if (event.shiftKey && event.key === 'ArrowDown') { event.preventDefault(); extendSelection(1); return }
     if (mod && event.altKey && ['1', '2', '3'].includes(event.key)) { event.preventDefault(); showBranchDepth(Number(event.key)); return }
@@ -776,6 +799,7 @@ export function MapEditorPage() {
           <button className={editorView === 'mindmap' ? 'active' : ''} onClick={() => changeEditorView('mindmap')} title="思维导图"><Network size={15} /><span>导图</span></button>
         </div>
         <div className="toolbar-spacer" />
+        {selectedNodeId && !readOnly && !presentationMode && <NodeOrderMenu root={document.root} nodeIds={selectedNodeIds} onMove={(action) => void moveSelectedSibling(action)} open={orderMenuOpen} onOpenChange={setOrderMenuOpen} />}
         <button className={`toolbar-action-button ${backlinksOpen && editorView === 'mindmap' ? 'active' : ''}`} aria-label="双向链接与反向引用" title="输入 [[文档名称]]，双击高亮文字打开文档" onClick={() => {
           if (editorView === 'outline') globalThis.document.querySelector('.outline-document .document-backlinks')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
           else setBacklinksOpen((value) => !value)
@@ -846,6 +870,7 @@ export function MapEditorPage() {
       <NodeContextMenu onCommand={command} isRoot={isRoot} hasClipboard={Boolean(useDocumentStore.getState().clipboard)} disabled={readOnly || presentationMode}>
         {editorView === 'outline' ? <OutlineEditor
           root={viewRoot}
+          onReorder={moveSelectedSibling}
           documentTitle={document.title}
           onRenameDocument={(title) => renameDocument(document.id, title)}
           onOpenDetails={(nodeId) => {
@@ -867,6 +892,7 @@ export function MapEditorPage() {
           tabIndex={0}
           onPointerDownCapture={(event) => {
             const target = event.target as HTMLElement
+            if (target.closest('.node-quick-actions, .canvas-controls')) return
             if (!target.closest('[contenteditable="true"]')) event.currentTarget.focus({ preventScroll: true })
             const anchor = adapterRef.current?.resolveNode(target)
             const blankCanvasPress = event.pointerType === 'mouse' && event.button === 0
@@ -1095,6 +1121,9 @@ export function MapEditorPage() {
             setNodeAnchor(anchor ?? (selectedNodeId ? adapterRef.current?.anchorFor(selectedNodeId) : undefined))
           }}
           onClick={(event) => {
+            // Floating controls are not blank canvas: their own actions must
+            // keep the selection (and a newly inserted child) intact.
+            if ((event.target as HTMLElement).closest('.node-quick-actions, .canvas-controls')) return
             // Keep focus and the browser's text selection inside the inline editor.
             // Focusing the stage here would discard a drag-selected text range before
             // the user can delete it with Backspace.
@@ -1162,6 +1191,7 @@ export function MapEditorPage() {
           </div>
         </main>}
       </NodeContextMenu>
+      <MindMapTextToolbar key={`${id}-${editorView}`} hostRef={canvasRef} enabled={engineReady && editorView === 'mindmap' && !readOnly && !presentationMode} />
       {backlinksOpen && editorView === 'mindmap' && !presentationMode && <DocumentLinks document={document} documents={documents} onGoToNode={goToLinkedNode} overlay onClose={() => setBacklinksOpen(false)} />}
       {nameError && <div className="document-link-error" role="alert"><span>{nameError}</span><button aria-label="关闭名称提示" onClick={() => useDocumentStore.getState().clearNameError()}>×</button></div>}
       {ambiguousLink && <div className="wiki-choice-backdrop"><section className="wiki-choice" role="dialog" aria-modal="true" aria-label="选择同名文档"><header><strong>选择「{ambiguousLink}」对应的文档</strong><button className="icon-button" aria-label="关闭文档选择" onClick={() => setAmbiguousLink(undefined)}><X size={16} /></button></header><p>旧资料包含同名文档，请选择目标；可随后重命名以区分。</p>{matchingDocuments(documents, ambiguousLink).map((item) => <button key={item.id} onClick={() => void openWikiLink(ambiguousLink, item.id)}>{item.title}<small>{item.folderId ? useDocumentStore.getState().folders.find((folder) => folder.id === item.folderId)?.name : '未分类'} · {countNodes(item.root)} 个节点 · {new Date(item.updatedAt).toLocaleString()}</small></button>)}</section></div>}

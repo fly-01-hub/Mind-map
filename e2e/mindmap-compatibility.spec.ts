@@ -1,14 +1,14 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 async function openMap(page: import('@playwright/test').Page) {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await expect(page.locator('.me-tpc')).toHaveCount(11)
 }
 
 test('applies Mubu-style task and topic formatting shortcuts in the map', async ({ page }) => {
   await openMap(page)
-  const topic = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  const topic = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
   await topic.click()
 
   await page.keyboard.press('Control+Shift+L')
@@ -26,7 +26,7 @@ test('applies Mubu-style task and topic formatting shortcuts in the map', async 
 
 test('supports keyboard range selection and batch deletion in the map', async ({ page }) => {
   await openMap(page)
-  const topic = page.locator('.me-tpc', { hasText: '相机模型' }).first()
+  const topic = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
   await topic.click()
   await page.keyboard.press('Shift+ArrowDown')
   await expect(page.getByRole('toolbar', { name: '主题操作' })).toContainText('已选 2 项')
@@ -83,15 +83,15 @@ test('stops space-drag panning as soon as Space is released', async ({ page }) =
 
 test('moves and deletes multiple selected map topics as one group', async ({ page }) => {
   await openMap(page)
-  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
-  const target = page.locator('.me-tpc', { hasText: '深度学习' }).first()
+  const first = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const second = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
+  const target = page.locator('.me-tpc', { hasText: '分支丙项' }).first()
 
   await first.click()
   await second.click({ modifiers: ['Shift'] })
   await expect(page.getByRole('toolbar', { name: '主题操作' })).toContainText('已选 2 项')
   await page.getByRole('button', { name: '移动到', exact: true }).click()
-  await page.getByRole('button', { name: '移动到 深度学习' }).click()
+  await page.getByRole('button', { name: '移动到 分支丙项' }).click()
 
   const firstBox = await first.boundingBox()
   const secondBox = await second.boundingBox()
@@ -108,8 +108,8 @@ test('moves and deletes multiple selected map topics as one group', async ({ pag
 
 test('box-selects topics from blank canvas and clears them with a blank click', async ({ page }) => {
   await openMap(page)
-  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
+  const first = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const second = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
   const firstBox = await first.boundingBox()
   const secondBox = await second.boundingBox()
   const stageBox = await page.locator('.mindmap-stage').boundingBox()
@@ -129,9 +129,9 @@ test('box-selects topics from blank canvas and clears them with a blank click', 
 
 test('reorders multiple selected sibling topics together', async ({ page }) => {
   await openMap(page)
-  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
-  const third = page.locator('.me-tpc', { hasText: 'BEV' }).first()
+  const first = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const second = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
+  const third = page.locator('.me-tpc', { hasText: '子项甲三' }).first()
   await first.click()
   await second.click({ modifiers: ['Shift'] })
   await page.keyboard.press('Control+Shift+ArrowDown')
@@ -149,9 +149,9 @@ test('reorders multiple selected sibling topics together', async ({ page }) => {
 
 test('drags multiple selected map topics together', async ({ page }) => {
   await openMap(page)
-  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
-  const target = page.locator('.me-tpc', { hasText: '深度学习' }).first()
+  const first = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const second = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
+  const target = page.locator('.me-tpc', { hasText: '分支丙项' }).first()
 
   await first.click()
   await second.click({ modifiers: ['Shift'] })
@@ -177,8 +177,8 @@ test('drags multiple selected map topics together', async ({ page }) => {
 
 test('creates summaries and relations directly from map selections', async ({ page }) => {
   await openMap(page)
-  const first = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const second = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
+  const first = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const second = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
 
   await first.click()
   await second.click({ modifiers: ['Shift'] })
@@ -188,7 +188,7 @@ test('creates summaries and relations directly from map selections', async ({ pa
   await first.click()
   await page.getByRole('button', { name: '连接', exact: true }).click()
   await expect(page.locator('.relation-mode-hint')).toContainText('请选择另一个主题')
-  await page.locator('.me-tpc', { hasText: '激光雷达' }).first().click()
+  await page.locator('.me-tpc', { hasText: '分支乙项' }).first().click()
   await expect(page.locator('.topiclinks [data-linkid]')).toHaveCount(1)
   await expect(page.locator('.relation-mode-hint')).toHaveCount(0)
 })
@@ -196,17 +196,17 @@ test('creates summaries and relations directly from map selections', async ({ pa
 test('search reveals a map topic without entering an isolated branch', async ({ page }) => {
   await openMap(page)
   await page.getByRole('button', { name: '搜索', exact: true }).click()
-  await page.getByPlaceholder('搜索节点、标签或笔记…').fill('Transformer')
-  await page.getByRole('button', { name: /Transformer/ }).click()
+  await page.getByPlaceholder('搜索节点、标签或笔记…').fill('子项丙一')
+  await page.getByRole('button', { name: /子项丙一/ }).click()
 
   await expect(page.locator('.focus-breadcrumb')).toHaveCount(0)
   await expect(page.locator('.me-tpc')).toHaveCount(11)
-  await expect(page.locator('.me-tpc', { hasText: 'Transformer' }).first()).toHaveClass(/selected/)
+  await expect(page.locator('.me-tpc', { hasText: '子项丙一' }).first()).toHaveClass(/selected/)
 })
 
 test('read-only and presentation modes block structural keyboard edits', async ({ page }) => {
   await openMap(page)
-  const topic = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  const topic = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
   await topic.click()
   const before = await page.locator('.me-tpc').count()
 
@@ -237,7 +237,7 @@ test('keeps the center topic and document title synchronized', async ({ page }) 
 
 test('adds an image to a map topic through the Mubu shortcut', async ({ page }) => {
   await openMap(page)
-  const topic = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  const topic = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
   await topic.click()
 
   const chooserPromise = page.waitForEvent('filechooser')
@@ -254,8 +254,8 @@ test('adds an image to a map topic through the Mubu shortcut', async ({ page }) 
 
 test('drops and pastes local images directly into map topics', async ({ page }) => {
   await openMap(page)
-  const droppedTopic = page.locator('.me-tpc', { hasText: '相机模型' }).first()
-  const pastedTopic = page.locator('.me-tpc', { hasText: '柱状投影' }).first()
+  const droppedTopic = page.locator('.me-tpc', { hasText: '子项甲一' }).first()
+  const pastedTopic = page.locator('.me-tpc', { hasText: '子项甲二' }).first()
   const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
   const createImageTransfer = () => page.evaluateHandle((base64) => {
     const transfer = new DataTransfer()
@@ -279,6 +279,6 @@ test('drops and pastes local images directly into map topics', async ({ page }) 
 
   await page.waitForTimeout(450)
   await page.reload()
-  await expect(page.locator('.me-tpc', { hasText: '相机模型' }).first().locator('img')).toHaveCount(1)
-  await expect(page.locator('.me-tpc', { hasText: '柱状投影' }).first().locator('img')).toHaveCount(1)
+  await expect(page.locator('.me-tpc', { hasText: '子项甲一' }).first().locator('img')).toHaveCount(1)
+  await expect(page.locator('.me-tpc', { hasText: '子项甲二' }).first().locator('img')).toHaveCount(1)
 })

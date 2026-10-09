@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { createTestPdf } from './testPdf'
 
 test('uploads one PDF and links it to multiple mind-map nodes without console errors', async ({ page }) => {
@@ -6,9 +6,9 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().click()
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await expect(page.getByText('文献 · 0', { exact: true })).toBeVisible()
 
@@ -21,14 +21,14 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
   await expect(page.getByText('Attention Is All You Need', { exact: true })).toBeVisible()
   await expect(page.getByText('文献 · 1', { exact: true })).toBeVisible()
 
-  await page.locator('.me-tpc', { hasText: '深度学习' }).first().click()
+  await page.locator('.me-tpc', { hasText: '分支丙项' }).first().click()
   await expect(page.getByText('文献 · 0', { exact: true })).toBeVisible()
   await page.getByLabel('选择已有论文').selectOption({ label: 'Attention Is All You Need' })
   await page.getByRole('button', { name: '关联', exact: true }).click()
   await expect(page.getByText('文献 · 1', { exact: true })).toBeVisible()
 
   await page.reload()
-  await page.locator('.me-tpc', { hasText: '深度学习' }).first().click()
+  await page.locator('.me-tpc', { hasText: '分支丙项' }).first().click()
   await expect(page.locator('.embedded-reader')).toBeVisible()
   await page.locator('.embedded-reader').getByRole('button', { name: '返回思维导图', exact: true }).click()
   await page.getByRole('button', { name: '节点详情' }).click()
@@ -37,9 +37,9 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
 })
 
 test('creates a visible paper node when a PDF is dropped onto a topic', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  const target = page.locator('.me-tpc', { hasText: 'BEV' }).first()
+  const target = page.locator('.me-tpc', { hasText: '子项甲三' }).first()
   await expect(target).toBeVisible()
   const bytes = Array.from(createTestPdf())
 

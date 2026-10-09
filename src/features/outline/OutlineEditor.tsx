@@ -8,7 +8,7 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useSelectionStore } from '../../stores/selectionStore'
 import type { NodeData } from '../../types/mindmap'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
-import { findParent } from '../../utils/tree'
+import type { NodeOrderAction } from '../../utils/nodeOrder'
 import { clearWikiEditor, highlightWikiEditor, wikiLinkAtPoint } from '../../utils/wikiLinks'
 import { DocumentTitleInput } from '../documentLinks/DocumentTitleInput'
 import { WikiText } from '../documentLinks/WikiText'
@@ -95,7 +95,7 @@ function OutlineRow({
   node, depth, number, showNumbering, previousId, nextId, selected, registerInput, focusNode, dragState, setDragState,
   onFormatSelection, onSelect,
   onOpenDetails,
-  onOpenWikiLink, readOnly,
+  onOpenWikiLink, readOnly, onReorder,
 }: {
   node: NodeData
   depth: number
@@ -113,6 +113,7 @@ function OutlineRow({
   onOpenDetails: (id: string) => void
   onOpenWikiLink: (name: string) => void
   readOnly: boolean
+  onReorder: (action: NodeOrderAction) => Promise<void>
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null)
@@ -263,14 +264,14 @@ function OutlineRow({
       focusNode(previousId, previousTitle.length)
       return
     }
-    if (event.key === 'ArrowUp' && start === 0 && end === 0 && previousId) {
+    if (!mod && event.key === 'ArrowUp' && start === 0 && end === 0 && previousId) {
       event.preventDefault()
       commit()
       setSelectedNode(previousId)
       focusNode(previousId, 'end')
       return
     }
-    if (event.key === 'ArrowDown' && start === value.title.length && end === value.title.length && nextId) {
+    if (!mod && event.key === 'ArrowDown' && start === value.title.length && end === value.title.length && nextId) {
       event.preventDefault()
       commit()
       setSelectedNode(nextId)
@@ -298,17 +299,8 @@ function OutlineRow({
       return
     }
     if (mod && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      const currentDocument = store.documents.find((item) => item.id === store.activeDocumentId)
-      const match = currentDocument && findParent(currentDocument.root, node.id)
-      if (!match) return
-      const sibling = event.key === 'ArrowUp'
-        ? match.parent.children[match.index - 1]
-        : match.parent.children[match.index + 1]
-      if (!sibling) return
       event.preventDefault()
-      commit()
-      store.moveRelative(node.id, sibling.id, event.key === 'ArrowUp' ? 'before' : 'after')
-      focusNode(node.id, start)
+      void onReorder(event.key === 'ArrowUp' ? 'moveUp' : 'moveDown').then(() => focusNode(node.id, start))
       return
     }
     if (event.altKey && event.key === '.') {
@@ -544,7 +536,7 @@ function FormattingToolbar({ selection, editor, close }: {
   )
 }
 
-export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDetails, onDropFiles, onOpenPaperNode, paperNodeIds = [], showNumbering = false, onOpenWikiLink, readOnly = false, backlinks }: {
+export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDetails, onDropFiles, onOpenPaperNode, paperNodeIds = [], showNumbering = false, onOpenWikiLink, readOnly = false, backlinks, onReorder }: {
   root: NodeData
   documentTitle: string
   onRenameDocument: (title: string) => void
@@ -556,6 +548,7 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
   onOpenWikiLink: (name: string) => void
   readOnly?: boolean
   backlinks?: React.ReactNode
+  onReorder: (action: NodeOrderAction) => Promise<void>
 }) {
   const inputsRef = useRef(new Map<string, HTMLElement>())
   const explicitFocusRef = useRef<string | undefined>(undefined)
@@ -704,6 +697,7 @@ export function OutlineEditor({ root, documentTitle, onRenameDocument, onOpenDet
             number={number}
             showNumbering={showNumbering}
             onOpenWikiLink={onOpenWikiLink}
+            onReorder={onReorder}
             readOnly={readOnly}
             previousId={visible[index - 1]?.node.id}
             nextId={visible[index + 1]?.node.id}

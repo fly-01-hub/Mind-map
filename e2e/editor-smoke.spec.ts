@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { readFile } from 'node:fs/promises'
 
 test('creates a complete local backup from the library', async ({ page }) => {
@@ -36,7 +36,7 @@ test('switches library layouts and exposes the canvas operation guide', async ({
   await page.getByRole('button', { name: '列表视图' }).click()
   await expect(page.locator('.document-row')).toHaveCount(3)
 
-  await page.getByText('自动驾驶感知研究', { exact: true }).click()
+  await page.getByText('测试导图甲', { exact: true }).click()
   await page.getByRole('button', { name: '操作指南' }).click()
   await expect(page.getByRole('heading', { name: '操作指南与快捷键' })).toBeVisible()
   await expect(page.getByText('大纲优先')).toBeVisible()
@@ -55,19 +55,19 @@ test('library opens a right-facing editable map without console errors', async (
 
   await page.goto('/library')
   await expect(page.getByRole('heading', { name: '全部文档' })).toBeVisible()
-  const folderRow = page.getByRole('button', { name: '科研资料 2' })
+  const folderRow = page.getByRole('button', { name: '测试文件夹甲 2' })
   const folderBox = await folderRow.boundingBox()
   expect(folderBox).not.toBeNull()
   expect(folderBox!.width).toBeGreaterThan(120)
   expect(folderBox!.height).toBeLessThan(40)
-  await page.getByText('自动驾驶感知研究', { exact: true }).click()
-  await expect(page).toHaveURL(/\/map\/research-map/)
+  await page.getByText('测试导图甲', { exact: true }).click()
+  await expect(page).toHaveURL(/\/map\/test-map/)
   await page.getByRole('button', { name: '导图', exact: true }).click()
 
   const topics = page.locator('.me-tpc')
   await expect(topics).toHaveCount(11)
-  const root = page.locator('.me-tpc', { hasText: '研究方向' }).first()
-  const child = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  const root = page.locator('.me-tpc', { hasText: '测试主题' }).first()
+  const child = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
   const rootBox = await root.boundingBox()
   const childBox = await child.boundingBox()
   expect(rootBox).not.toBeNull()
@@ -101,12 +101,12 @@ test('library opens a right-facing editable map without console errors', async (
   await editor.press('Enter')
   await expect(topics).toHaveCount(13)
 
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().click({ button: 'right' })
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().click({ button: 'right' })
   await expect(page.getByText('插入下级主题', { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
 
   await page.keyboard.press('Control+]')
-  await expect(page.locator('.focus-breadcrumb')).toContainText('研究方向')
+  await expect(page.locator('.focus-breadcrumb')).toContainText('测试主题')
   await expect(topics).toHaveCount(1)
   await page.locator('.focus-breadcrumb button').first().click()
   await expect(topics).toHaveCount(13)
@@ -117,10 +117,10 @@ test('library opens a right-facing editable map without console errors', async (
 test('dragging reparents a complete subtree', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  const fish = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
-  const deep = page.locator('.me-tpc', { hasText: '深度学习' }).first()
+  const fish = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
+  const deep = page.locator('.me-tpc', { hasText: '分支丙项' }).first()
   await expect(fish).toBeVisible()
 
   const from = await fish.boundingBox()
@@ -171,14 +171,14 @@ test('creates a document, edits children, and restores them after refresh', asyn
 })
 
 test('exports the complete map as a PNG download', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await expect(page.locator('.me-tpc')).toHaveCount(11)
   await page.getByRole('button', { name: '更多' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByText('导出 2× PNG', { exact: true }).click()
   const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe('自动驾驶感知研究.png')
+  expect(download.suggestedFilename()).toBe('测试导图甲.png')
   expect(await download.failure()).toBeNull()
 })
 
@@ -186,7 +186,7 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
   test.setTimeout(45_000)
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.getByRole('button', { name: '更多' }).click()
   await page.getByRole('menuitem', { name: '导入文件' }).click()
@@ -209,7 +209,7 @@ test('imports and remains editable with 500 nodes', async ({ page }) => {
 })
 
 test('edits structure continuously in the outline-first view', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await expect(page.getByRole('button', { name: '大纲' })).toHaveClass(/active/)
   await expect(page.locator('.outline-row')).toHaveCount(10)
 
@@ -259,7 +259,7 @@ test('edits structure continuously in the outline-first view', async ({ page }) 
 })
 
 test('selects a range of outline topics and applies one atomic bulk action', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   const leafBullets = page.locator('.outline-bullet:not(.has-children)')
   await leafBullets.nth(0).click()
   await leafBullets.nth(2).click({ modifiers: ['Control'] })
@@ -276,13 +276,13 @@ test('selects a range of outline topics and applies one atomic bulk action', asy
 })
 
 test('creates and persists a cross-topic relation in the mind-map view', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  const first = page.locator('.me-tpc', { hasText: '鱼眼视觉' }).first()
+  const first = page.locator('.me-tpc', { hasText: '分支甲项' }).first()
   await first.click()
   await expect(page.getByRole('button', { name: '创建关联线' })).toBeVisible()
   await page.getByRole('button', { name: '创建关联线' }).click()
-  await page.getByRole('button', { name: '关联到 激光雷达' }).click()
+  await page.getByRole('button', { name: '关联到 分支乙项' }).click()
   await expect(page.locator('.topiclinks [data-linkid]')).toHaveCount(1)
 
   await page.getByRole('button', { name: '大纲', exact: true }).click()
@@ -291,9 +291,9 @@ test('creates and persists a cross-topic relation in the mind-map view', async (
 })
 
 test('creates a persistent summary from adjacent outline topics', async ({ page }) => {
-  await page.goto('/map/research-map')
-  const firstRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '相机模型' }) })
-  const secondRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '柱状投影' }) })
+  await page.goto('/map/test-map')
+  const firstRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '子项甲一' }) })
+  const secondRow = page.locator('.outline-row', { has: page.locator('.outline-topic-input', { hasText: '子项甲二' }) })
   await firstRow.locator('.outline-bullet').click()
   await secondRow.locator('.outline-bullet').click({ modifiers: ['Control'] })
   await page.getByRole('button', { name: '概要', exact: true }).click()
@@ -306,7 +306,7 @@ test('creates a persistent summary from adjacent outline topics', async ({ page 
 })
 
 test('persists map appearance and offers a distraction-free presentation mode', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   await page.getByRole('button', { name: '更多' }).click()
   await page.getByRole('menuitemradio', { name: '海洋蓝' }).click()
@@ -325,7 +325,7 @@ test('persists map appearance and offers a distraction-free presentation mode', 
 })
 
 test('round-trips a local XMind file without an online converter', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '更多' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('menuitem', { name: '导出 XMind' }).click()
@@ -346,7 +346,7 @@ test('round-trips a local XMind file without an online converter', async ({ page
 })
 
 test('round-trips OPML and edits a structured table locally', async ({ page }) => {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '更多' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('menuitem', { name: '导出 OPML' }).click()

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { mockDocuments } from '../data/mockDocuments'
 import type { ClipboardPayload, FolderData, MapArrow, MapSummary, MindMapDocument, NodeData } from '../types/mindmap'
 import {
   cloneSubtree, createNode, duplicateSubtree, findNode, insertChild, insertSibling,
@@ -8,6 +7,7 @@ import {
   splitNode, topLevelSelectedNodes,
 } from '../utils/tree'
 import { useSaveStore } from './saveStore'
+import { reorderSiblings, type NodeOrderAction } from '../utils/nodeOrder'
 import { documentNameKey, matchingDocuments, rewriteTreeLinks, uniqueDocumentName } from '../utils/wikiLinks'
 
 interface DocumentSnapshot { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] }
@@ -47,6 +47,7 @@ export interface DocumentState {
   mergeInto: (nodeId: string, targetId: string) => void
   moveRelative: (nodeId: string, targetId: string, position: 'before' | 'inside' | 'after') => void
   moveManyRelative: (nodeIds: string[], targetId: string, position: 'before' | 'inside' | 'after') => void
+  reorderSiblings: (nodeIds: string[], action: NodeOrderAction) => 'moved' | 'unchanged' | 'summary-conflict'
   toggleCollapsed: (nodeId: string) => void
   remove: (nodeId: string) => void
   removeMany: (nodeIds: string[]) => void
@@ -141,11 +142,8 @@ function touchDocument(document: MindMapDocument, patch: Partial<MindMapDocument
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
-  documents: mockDocuments,
-  folders: [
-    { id: 'research', name: '科研资料', order: 0, createdAt: '2026-09-18T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' },
-    { id: 'writing', name: '创作计划', order: 1, createdAt: '2026-09-18T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' },
-  ],
+  documents: [],
+  folders: [],
   hydrated: false,
   histories: {},
   clearNameError: () => set({ nameError: undefined }),
@@ -251,6 +249,27 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   mergeInto: (nodeId, targetId) => set((state) => updateActive(state, (document) => withRoot(document, mergeNodeInto(document.root, nodeId, targetId)))),
   moveRelative: (nodeId, targetId, position) => set((state) => updateActive(state, (document) => withRoot(document, moveSubtreeRelative(document.root, nodeId, targetId, position)))),
   moveManyRelative: (nodeIds, targetId, position) => set((state) => updateActive(state, (document) => withRoot(document, moveSubtreesRelative(document.root, nodeIds, targetId, position)))),
+  reorderSiblings: (nodeIds, action) => {
+    let result: 'moved' | 'unchanged' | 'summary-conflict' = 'unchanged'
+    set((state) => updateActive(state, (document) => {
+      const root = reorderSiblings(document.root, nodeIds, action)
+      if (root === document.root) return document
+      // Resolve old index-only summaries before changing their node positions.
+      const summaries = (document.summaries ?? []).map((summary) => ({
+        ...summary,
+        nodeIds: summary.nodeIds?.length ? summary.nodeIds : findNode(document.root, summary.parent)?.children
+          .slice(summary.start, summary.end + 1).map((node) => node.id),
+      }))
+      const next = withRoot({ ...document, summaries }, root)
+      if (next.summaries?.length !== summaries.length) {
+        result = 'summary-conflict'
+        return document
+      }
+      result = 'moved'
+      return next
+    }))
+    return result
+  },
   toggleCollapsed: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document,
     mapNode(document.root, nodeId, (node) => ({ ...node, collapsed: !node.collapsed, updatedAt: new Date().toISOString() }))))),
   remove: (nodeId) => set((state) => updateActive(state, (document) => withRoot(document, removeSubtree(document.root, nodeId)))),

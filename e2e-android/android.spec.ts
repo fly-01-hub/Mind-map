@@ -2,6 +2,10 @@ import { expect, test, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createTestPdf } from '../e2e/testPdf'
+import { checkNodeControls } from '../e2e/nodeControlChecks'
+import { checkTextColors } from '../e2e/textColorChecks'
+import { checkNodeOrder } from '../e2e/nodeOrderChecks'
+import { checkViewportStability } from '../e2e/viewportChecks'
 
 const origin = 'https://appassets.androidplatform.net'
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }) })
@@ -34,7 +38,7 @@ async function androidPage(page: Page, production = false) {
       export function removeStyle(id) { styles.get(id)?.remove(); styles.delete(id); }
     ` })
     if (!production) {
-      const response = await route.fetch({ url: `http://127.0.0.1:5175${requestPath}${new URL(route.request().url()).search}` })
+      const response = await route.fetch({ url: `http://127.0.0.1:5185${requestPath}${new URL(route.request().url()).search}` })
       return route.fulfill({ response })
     }
     const root = path.resolve('dist')
@@ -48,6 +52,26 @@ async function androidPage(page: Page, production = false) {
   await expect(page.getByRole('heading', { name: '全部文档' })).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('data-platform', 'android')
 }
+
+test('Android production node controls track the live editor without hiding text', async ({ page }) => {
+  await androidPage(page, true)
+  await checkNodeControls(page, 'test-results/node-controls-android')
+})
+
+test('Android production editing only pans for overflowing content', async ({ page }) => {
+  await androidPage(page, true)
+  await checkViewportStability(page, 'test-results/viewport-android')
+})
+
+test('Android production selected text colors persist across views without affecting links', async ({ page }) => {
+  await androidPage(page, true)
+  await checkTextColors(page, 'test-results/text-colors-android', true)
+})
+
+test('Android production touch menus reorder branches and preserve outline persistence', async ({ page }) => {
+  await androidPage(page, true)
+  await checkNodeOrder(page, 'test-results/node-order-android', true)
+})
 
 test('native export preserves all bytes in bounded chunks and handles cancellation', async ({ page }) => {
   await androidPage(page)
@@ -158,9 +182,9 @@ test('packaged PDF worker loads offline, renders, and restores the reading page'
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await androidPage(page, true)
-  await page.getByText('自动驾驶感知研究', { exact: true }).tap()
+  await page.getByRole('button', { name: '新建思维导图' }).first().tap()
   await page.getByRole('button', { name: '导图', exact: true }).tap()
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().tap()
+  await page.locator('.me-tpc').first().tap()
   await page.getByRole('button', { name: '节点详情', exact: true }).tap()
   await page.locator('input[accept="application/pdf,.pdf"]').setInputFiles({ name: '安卓离线 PDF.pdf', mimeType: 'application/pdf', buffer: createTestPdf() })
   await page.getByText('安卓离线 PDF', { exact: true }).tap()

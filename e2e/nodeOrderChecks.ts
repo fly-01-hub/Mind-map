@@ -1,0 +1,97 @@
+import { expect, type Page } from '@playwright/test'
+
+export async function checkNodeOrder(page: Page, screenshots: string, touch = false) {
+  const openOrder = async () => {
+    const button = page.getByRole('button', { name: '调整主题顺序', exact: true })
+    if (touch) await button.tap()
+    else await button.click()
+  }
+  const move = async (label: string) => {
+    await openOrder()
+    const item = page.getByRole('menuitem', { name: label, exact: true })
+    if (touch) await item.tap()
+    else await item.click()
+  }
+  const topic = (title: string) => page.locator('.me-tpc').filter({ hasText: new RegExp(`^${title}$`) })
+  const expectOrder = async (titles: string[]) => {
+    await expect.poll(async () => {
+      const boxes = await Promise.all(titles.map((title) => topic(title).boundingBox()))
+      return boxes.every((box, index) => box && (index === 0 || box.y > boxes[index - 1]!.y))
+    }).toBe(true)
+  }
+  await page.getByRole('button', { name: '新建思维导图' }).first().click()
+  await page.getByLabel('文档名称', { exact: true }).fill('同级排序调试')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  const root = page.locator('.me-tpc').first()
+  const editor = page.locator('#input-box[contenteditable]')
+  for (const title of ['甲节点', '乙节点', '丙节点', '丁节点']) {
+    await root.click()
+    await page.getByRole('button', { name: '添加子主题', exact: true }).click()
+    await editor.fill(title)
+    await editor.press('Escape')
+  }
+  await topic('丙节点').click()
+  await page.getByRole('button', { name: '添加子主题', exact: true }).click()
+  await editor.fill('丙的下级 [[关联目标]]')
+  await editor.press('Escape')
+  await topic('丙节点').click()
+  const nodeId = await topic('丙节点').getAttribute('data-nodeid')
+  await move('移到同级首位')
+  await expectOrder(['丙节点', '甲节点', '乙节点', '丁节点'])
+  await expect(topic('丙节点')).toHaveClass(/selected/)
+  await expect(topic('丙节点')).toHaveAttribute('data-nodeid', nodeId!)
+  await expect(page.locator('.me-tpc', { hasText: '丙的下级' })).toBeVisible()
+  await openOrder()
+  await expect(page.getByRole('menuitem', { name: '上移一位', exact: true })).toHaveAttribute('data-disabled', '')
+  await expect(page.getByRole('menuitem', { name: '移到同级首位', exact: true })).toHaveAttribute('data-disabled', '')
+  await page.screenshot({ path: `${screenshots}-first.png` })
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '撤销', exact: true }).click()
+  await expectOrder(['甲节点', '乙节点', '丙节点', '丁节点'])
+  await page.getByRole('button', { name: '重做', exact: true }).click()
+  await expectOrder(['丙节点', '甲节点', '乙节点', '丁节点'])
+  await move('下移一位')
+  await expectOrder(['甲节点', '丙节点', '乙节点', '丁节点'])
+  await move('移到同级末位')
+  await expectOrder(['甲节点', '乙节点', '丁节点', '丙节点'])
+  await move('上移一位')
+  await expectOrder(['甲节点', '乙节点', '丙节点', '丁节点'])
+  if (!touch) {
+    await topic('丙节点').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '调整顺序…', exact: true }).click()
+    await expect(page.getByRole('menuitem', { name: '移到同级首位', exact: true })).toBeVisible()
+    await expect(page.locator('.node-order-menu')).toHaveCSS('opacity', '1')
+    await page.screenshot({ path: `${screenshots}-context.png` })
+    await page.getByRole('menuitem', { name: '移到同级首位', exact: true }).click({ timeout: 5000 })
+    await expectOrder(['丙节点', '甲节点', '乙节点', '丁节点'])
+  }
+  // A pending edit must be committed before moving, not overwritten by stale tree data.
+  await topic('丙节点').dblclick()
+  await editor.fill('丙节点已编辑')
+  await move('移到同级末位')
+  await expectOrder(['甲节点', '乙节点', '丁节点', '丙节点已编辑'])
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  const rows = page.locator('.outline-topic-input')
+  await expect(rows).toHaveText(['甲节点', '乙节点', '丁节点', '丙节点已编辑', '丙的下级 [[关联目标]]'])
+  await rows.nth(2).click()
+  await move('移到同级首位')
+  await expect(rows).toHaveText(['丁节点', '甲节点', '乙节点', '丙节点已编辑', '丙的下级 [[关联目标]]'])
+  await page.screenshot({ path: `${screenshots}-outline.png` })
+  await expect(page.locator('.save-status')).toContainText('已保存到本地')
+  await page.reload()
+  await expect(rows).toHaveText(['丁节点', '甲节点', '乙节点', '丙节点已编辑', '丙的下级 [[关联目标]]'])
+  await rows.nth(0).click()
+  await page.keyboard.press('Control+Shift+ArrowDown')
+  await expect(rows).toHaveText(['甲节点', '丁节点', '乙节点', '丙节点已编辑', '丙的下级 [[关联目标]]'])
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expectOrder(['甲节点', '丁节点', '乙节点', '丙节点已编辑'])
+  await root.click()
+  await openOrder()
+  for (const label of ['上移一位', '下移一位', '移到同级首位', '移到同级末位']) {
+    await expect(page.getByRole('menuitem', { name: label, exact: true })).toHaveAttribute('data-disabled', '')
+  }
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitemcheckbox', { name: '只读浏览' }).click()
+  await expect(page.getByRole('button', { name: '调整主题顺序' })).toHaveCount(0)
+}

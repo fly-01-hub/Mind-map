@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { createTestPdf } from './testPdf'
 
 async function selectPdfText(page: Page) {
@@ -11,9 +11,9 @@ async function selectPdfText(page: Page) {
   })
 }
 async function setup(page: Page) {
-  await page.goto('/map/research-map')
+  await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().click()
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await page.locator('input[accept="application/pdf,.pdf"]').setInputFiles({ name: 'Evidence.pdf', mimeType: 'application/pdf', buffer: createTestPdf() })
   await page.getByText('Evidence', { exact: true }).click()
@@ -32,17 +32,17 @@ test('links existing nodes, opens precise source alongside map and creates a reg
   await dialog.locator('.knowledge-node-options label').first().getByRole('checkbox').check()
   await dialog.getByRole('button', { name: '关联到 2 个节点' }).click()
   await expect(page.locator('.knowledge-annotation-card .annotation-node-link')).toHaveCount(2)
-  await page.getByRole('button', { name: '打开已生成节点 BEV', exact: true }).click()
-  await expect(page.locator('.me-tpc', { hasText: 'BEV' }).first().locator('.node-source-badge')).toHaveText('📄1')
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().locator('.node-source-badge').click()
-  await expect(page).toHaveURL(/\/map\/research-map/)
+  await page.getByRole('button', { name: '打开已生成节点 子项甲三', exact: true }).click()
+  await expect(page.locator('.me-tpc', { hasText: '子项甲三' }).first().locator('.node-source-badge')).toHaveText('📄1')
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().locator('.node-source-badge').click()
+  await expect(page).toHaveURL(/\/map\/test-map/)
   await expect(page.locator('.embedded-reader')).toBeVisible()
   await expect(page.locator('.paper-annotation-mark.target')).toHaveCount(1)
   const reader = page.locator('.embedded-reader')
   // Selecting the same source again must locate it even after paging elsewhere.
   await reader.getByRole('button', { name: '下一页', exact: true }).click()
   await expect(reader.getByRole('spinbutton', { name: '当前页码' })).toHaveValue('2')
-  await page.locator('.me-tpc', { hasText: 'BEV' }).first().locator('.node-source-badge').click()
+  await page.locator('.me-tpc', { hasText: '子项甲三' }).first().locator('.node-source-badge').click()
   await expect(reader.getByRole('spinbutton', { name: '当前页码' })).toHaveValue('1')
   await expect(reader.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
   await reader.getByRole('button', { name: '区域批注', exact: true }).click()
@@ -59,7 +59,7 @@ test('links existing nodes, opens precise source alongside map and creates a reg
   await expect(reader.locator('.paper-annotation-mark.area')).toHaveCount(1)
   await area.getByRole('button', { name: '关联批注 第 1 页区域批注' }).click()
   await page.getByRole('dialog').getByRole('button', { name: '关联到 1 个节点' }).click()
-  await expect(page.locator('.me-tpc', { hasText: 'BEV' }).first().locator('.node-source-badge')).toHaveText('📄2')
+  await expect(page.locator('.me-tpc', { hasText: '子项甲三' }).first().locator('.node-source-badge')).toHaveText('📄2')
   // Correct an area in place; do not create another source or lose its backlink.
   await area.getByRole('button', { name: '重新框选区域' }).click()
   const regionBounds = (await reader.locator('.pdf-area-selector').boundingBox())!
@@ -78,7 +78,7 @@ test('links existing nodes, opens precise source alongside map and creates a reg
   await page.screenshot({ path: 'test-results/knowledge-narrow.png', fullPage: true })
   await reader.getByRole('button', { name: '返回思维导图' }).click()
   await expect(page.locator('.embedded-reader')).toHaveCount(0)
-  await expect(page.locator('.me-tpc', { hasText: 'BEV' })).toBeVisible()
+  await expect(page.locator('.me-tpc', { hasText: '子项甲三' })).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -90,7 +90,7 @@ test('drag references to nodes, unlink safely and undo, manage tags and batch re
   const reader = page.locator('.embedded-reader')
   await expect(reader.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
   await reader.getByRole('button', { name: '展开论文笔记' }).click()
-  const target = page.locator('.me-tpc', { hasText: 'BEV' }).first()
+  const target = page.locator('.me-tpc', { hasText: '子项甲三' }).first()
   await reader.getByRole('button', { name: '拖动批注 ResearchMind first page' }).dragTo(target)
   await expect(target.locator('.node-source-badge')).toHaveText('📄1')
   await page.locator('.source-panel-toggle').click()
@@ -139,7 +139,7 @@ test('imports a PDF into the local library without requiring a map or account', 
 test('protects linked annotation deletion and restores it without losing references', async ({ page }) => {
   await setup(page)
   const card = page.locator('.knowledge-annotation-card')
-  await card.getByRole('button', { name: '关联当前节点 · BEV' }).click()
+  await card.getByRole('button', { name: '关联当前节点 · 子项甲三' }).click()
   await expect(card.locator('.annotation-node-link')).toHaveCount(1)
   page.once('dialog', (dialog) => dialog.dismiss())
   await card.getByRole('button', { name: '删除标注 ResearchMind first page' }).click()

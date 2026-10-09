@@ -1,5 +1,7 @@
 # 文档 / 导图双向链接
 
+本文保留该功能引入版本的设计及历史测试记录；当前发行说明以 README.md 为准。新安装为空白，测试不使用用户日常知识库。
+
 更新日期：2026-10-04。源码和安装包版本：1.6.0。数据库仍为 v3，完整备份仍为 v1。
 
 ## 操作
@@ -44,20 +46,6 @@
 
 桌面验收：`npm run desktop:test` 使用 test-only 入口，启动前指定独立临时 `userData`，加载 `release/win-unpacked/resources/app.asar/electron/main.cjs` 中的实际桌面壳与包内 dist；实际新建“桌面双向链接调试”，验证导图到目标、反向定位、大纲内容以及关闭/重开后恢复。测试记录只针对该隔离配置；不等于已安装旧 EXE 的升级验证。
 
-开发验收阶段未写入日常桌面资料、未安装、未推送 GitHub，当时只读核对 EXE 为 1.5.2。用户随后明确授权安装并删除旧版，现已完成下面的升级验收。
-
 截图位置：`test-results/document-links-map.png`、`test-results/document-links-outline.png`，以及 `test-results/desktop/` 的导图来源、目标、大纲来源和重开目标截图。这些测试输出已被 Git 忽略。
 
 安装包：`release/ResearchMind-Setup-1.6.0-x64.exe`。最终 SHA-256：`AA398ACC927364B1ED9EDB3EFFD599D90B8BA9DF0BE655C8EF9AB8FBEF8BAF23`。
-
-## 已安装版本升级验收（2026-10-04）
-
-在确认应用关闭后，完整复制 `C:\Users\19555\AppData\Roaming\ResearchMind` 到 `release/ResearchMind-data-before-1.6.0-20261004-143512`。83 个文件、16,435,420 字节逐一 SHA-256 校验通过；这是包含 IndexedDB、Blob 和界面配置的目录副本，不是可在“从备份恢复”中直接选择的 `.researchmind` 文件。需要恢复此副本时先关闭应用，不自动覆盖日常资料。
-
-使用已校验的安装包，在原目录 `C:\Users\19555\AppData\Local\Programs\siweidaotu` 按当前用户升级，安装退出码 0。旧 1.5.2 程序被新版替换；注册表卸载信息仅保留 ResearchMind 枝间 1.6.0，EXE ProductVersion 1.6.0.0。79 个程序文件与 `release/win-unpacked` 逐一校验一致，桌面和开始菜单快捷方式仍指向该目录。历史安装包保留用于回退，不属于另一套已安装程序。
-
-升级后、首次启动前，日常配置目录的上述 83 个文件与备份完全一致。随后运行实际安装 EXE：知识库可见，原有导图能打开；只读核对数据库 11 张表，含 7 条文档记录（其中 3 份活动导图、4 份回收站记录）、3 个文件夹、31 个历史版本、1 篇论文/文件、3 条批注及相关关系。没有创建、重命名、删除或恢复用户文档。日常配置中的近期打开等界面状态可能随正常查看更新。
-
-通过 `RESEARCHMIND_INSTALLED_EXE` 指定实际安装 EXE 再执行 `desktop:test`，使用 `--user-data-dir` 指向独立临时目录，并在任何测试写入前断言 Electron 的真实 userData 路径。新建测试导图、双击新建目标、反向节点定位、切换大纲及关闭重开恢复均通过（1/1）；测试未写入日常资料。实际知识库/已有导图截图保存于 `release/installed-1.6.0-library.png`、`release/installed-1.6.0-existing-document.png`，隔离测试截图仍在 `test-results/desktop/`；这些私有输出均被 Git 忽略。
-
-Windows Computer Use 原生管道不可用，因此没有将该接口视为成功证据；可见验收通过项目现有 Playwright Electron 工具完成。系统日志有旧卸载器被应用控制拦截的 3077/3033 记录，但安装器最终退出 0，安装文件核验、实际 EXE 启动及交互测试成功。未修改系统保护、签名、文件哈希或名称来绕过拦截；不保证以后每次运行都不被系统提醒。
