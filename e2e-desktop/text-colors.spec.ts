@@ -14,6 +14,7 @@ test('desktop selected text colors and compact menu preserve native editing', as
     : await electron.launch({ args: [path.resolve('e2e-desktop/isolated-main.cjs')], env })
   try {
     const page = await app.firstWindow()
+    await page.setViewportSize({ width: 1440, height: 900 })
     await checkTextColors(page, 'test-results/text-colors-desktop')
     await page.getByRole('button', { name: '返回知识库' }).click()
     await checkContextMenu(page, 'test-results/text-colors-desktop')

@@ -133,6 +133,7 @@ export async function checkContextMenu(page: Page, screenshots: string) {
   await expect(menu.getByRole('menuitem', { name: '提升一级' })).not.toHaveAttribute('data-disabled', '')
   await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 1024, height: 400 })
+  await page.getByRole('button', { name: '适应画布', exact: true }).click()
   await child.click({ button: 'right' })
   await expect(menu).toBeVisible()
   const small = (await menu.boundingBox())!

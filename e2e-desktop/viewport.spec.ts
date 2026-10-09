@@ -12,6 +12,10 @@ test('desktop editing stays in place and minimally follows overflowing content',
   const app = process.env.RESEARCHMIND_INSTALLED_EXE
     ? await electron.launch({ executablePath: process.env.RESEARCHMIND_INSTALLED_EXE, args: [`--user-data-dir=${profile}`], env })
     : await electron.launch({ args: [path.resolve('e2e-desktop/isolated-main.cjs')], env })
-  try { await checkViewportStability(await app.firstWindow(), 'test-results/viewport-desktop') }
+  try {
+    const page = await app.firstWindow()
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await checkViewportStability(page, 'test-results/viewport-desktop')
+  }
   finally { await app.close() }
 })
