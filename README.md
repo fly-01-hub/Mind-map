@@ -6,7 +6,9 @@
 
 ## 下载与运行
 
-Windows 安装包见 [GitHub Releases](https://github.com/fly-01-hub/Mind-map/releases/latest)，选择 `ResearchMind-Setup-1.7.5-x64.exe`。GitHub 的 “Code → Download ZIP” 下载的是源码，不是安装程序。发布构建完成后安装包才会出现在 Releases。
+Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.5-x64.exe`。
+
+本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库是独立的新仓库，只有 `README.md`、`redme.txt` 使用说明和 Release 的 EXE 附件，不共享本仓库的提交历史。公开仓库的自动 “Source code” ZIP/TAR 仅包含说明文档，不是应用源码，也不是安装程序。
 
 安装前关闭旧版并创建完整备份。未提供可信商业签名，系统可能拦截安装；不要关闭或绕过安全保护。新安装为空白，正常覆盖升级保留原用户数据。其他人不会得到开发者的本地知识库。
 
@@ -59,7 +61,9 @@ npm run desktop:build
 npm run desktop:test
 ```
 
-Windows 输出 `release/ResearchMind-Setup-1.7.5-x64.exe`。推送版本标签会触发 GitHub Actions 构建和发布。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+Windows 输出 `release/ResearchMind-Setup-1.7.5-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布；公开发行是另外一步：审查产物、核对 SHA-256 后，只将 EXE 上传到 `Mind-map-download` 的 Release，并更新该仓库的使用说明。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+
+安装包不包含个人知识库，但包含运行所需的程序资源。不公开源码仓库不等于程序不可逆向；不要承诺 EXE 无法被提取或绝对源码保密。
 
 桌面启动/构建命令会先执行 Electron 提供的运行时安装脚本；首次下载需联网。`npm ci` 只安装 Electron 的 npm 包，不保证桌面运行时已下载。
 
