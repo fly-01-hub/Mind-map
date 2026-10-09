@@ -28,11 +28,13 @@ jobs:
       - name: Run automated checks
         run: |
           npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run lint
 
       - name: Build Windows installer
-        run: npm run desktop:build
+        run: npm run desktop:build -- --publish never
 
       - name: Audit public package
         run: npm run verify:public
@@ -40,6 +42,7 @@ jobs:
       - name: Verify empty first launch and isolated desktop behavior
         run: |
           npx playwright test --config playwright.public.config.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run desktop:test
 
       - name: Upload installer artifact
