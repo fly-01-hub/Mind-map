@@ -1,14 +1,18 @@
 # ResearchMind 枝间
 
-本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.5**。
+本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.6**。
+
+[免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest)。源码保持私有，公开网页只分发构建后的运行资源，各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
+
+新对话中的 AI 接手请先完整阅读 [redme.txt](redme.txt)。其中汇总项目结构、数据安全、未提交改动、部署与证书状态、验证记录及待办事项；状态快照整理于 2026-10-12，接手时应重新核对。
 
 **首次打开是空白知识库**：不预置导图、文件夹、论文、附件或历史记录。已有用户升级不会被清空；只有主动新建或导入备份才会出现内容。无需账号、云数据库或付费 API。
 
 ## 下载与运行
 
-Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.5-x64.exe`。
+Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.6-x64.exe`。
 
-本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库是独立的新仓库，只有 `README.md`、`redme.txt` 使用说明和 Release 的 EXE 附件，不共享本仓库的提交历史。公开仓库的自动 “Source code” ZIP/TAR 仅包含说明文档，不是应用源码，也不是安装程序。
+本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库独立维护：main 分支放使用说明，Release 放 EXE 附件，gh-pages 分支只放网页构建资源，不共享本仓库的源码或提交历史。Release 的自动 “Source code” ZIP/TAR 对应公开 main 分支的说明；gh-pages 的 ZIP 包含可查看的网页运行资源，均不是原始开发工程。
 
 安装前关闭旧版并创建完整备份。未提供可信商业签名，系统可能拦截安装；不要关闭或绕过安全保护。新安装为空白，正常覆盖升级保留原用户数据。其他人不会得到开发者的本地知识库。
 
@@ -27,6 +31,12 @@ npm run preview -- --host 127.0.0.1
 ```
 
 PWA 可在支持的浏览器中安装为独立窗口，但本地网页仍需本机服务运行；它不是 Windows 安装包。浏览器来源、PWA、Windows 和安卓各自拥有数据空间，不会自动搬运旧资料。
+
+## 局域网共享程序
+
+支持“大家使用同一套软件，各自保存资料”的独立 HTTPS 部署模式。只共享编译后的程序文件，导图、历史、PDF、批注及备份仍保存在各自浏览器中；不新增共享数据库，不改变现有前端功能。原 `127.0.0.1:4173` 使用方式和资料保持不变。
+
+部署者配置本机 `config/lan.local.json`、客户端信任的 HTTPS 证书及经批准的网络访问后，运行 `npm run lan:check`、`npm run lan:serve`。没有证书时可以用 `npm run lan:cert-request` 生成管理员签名所需的申请。不会自动安装根证书、修改防火墙或绕过安全警告。完整步骤及隔离边界见 [局域网部署教程](docs/LAN.md)。
 
 ## 主要功能
 
@@ -56,12 +66,14 @@ npm run lint
 npm run test:e2e
 npm run test:public
 npm run verify:public
+npm run test:lan
+npm run test:lan:browser
 npm run desktop:build
 # 桌面专项使用独立临时配置，不读写日常知识库
 npm run desktop:test
 ```
 
-Windows 输出 `release/ResearchMind-Setup-1.7.5-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布；公开发行是另外一步：审查产物、核对 SHA-256 后，只将 EXE 上传到 `Mind-map-download` 的 Release，并更新该仓库的使用说明。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+Windows 输出 `release/ResearchMind-Setup-1.7.6-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布。执行 `npm run release:public` 可完成检查、安装包构建、网页构建及公开发行；凭据从当前 GitHub 登录读取，不写入文件。公开上传严格限制为 EXE、使用说明及网页构建资源。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
 
 安装包不包含个人知识库，但包含运行所需的程序资源。不公开源码仓库不等于程序不可逆向；不要承诺 EXE 无法被提取或绝对源码保密。
 

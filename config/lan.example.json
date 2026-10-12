@@ -1,0 +1,10 @@
+{
+  "listenAddress": "192.168.1.20",
+  "port": 8443,
+  "publicOrigin": "https://192.168.1.20:8443",
+  "allowedClientSubnets": ["192.168.1.0/24"],
+  "tls": {
+    "certificateFile": "../.lan-private/server-cert.pem",
+    "privateKeyFile": "../.lan-private/server-key.pem"
+  }
+}

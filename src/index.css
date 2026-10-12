@@ -162,6 +162,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mindmap-canvas .me-tpc { max-width: 290px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; font-family: inherit; font-size: 13px; box-shadow: 0 2px 8px rgba(47, 62, 52, .05); transition: box-shadow .14s ease, border-color .14s ease; }
 .mindmap-canvas .me-root > .me-parent > .me-tpc { font-size: 15px; font-weight: 650; box-shadow: 0 7px 22px rgba(35, 55, 42, .18); }
 .mindmap-canvas .selected { box-shadow: 0 0 0 2px #93a99a, 0 5px 15px rgba(44, 64, 50, .11) !important; }
+.mindmap-canvas .map-container .me-parent > .me-epd { opacity: 0; visibility: hidden; pointer-events: none; }
+.mindmap-canvas .map-container .me-parent > .me-tpc.selected ~ .me-epd { opacity: .8; visibility: visible; pointer-events: auto; }
 .mindmap-canvas #input-box[contenteditable] { min-width: 80px; -webkit-user-select: text !important; user-select: text !important; cursor: text; outline: 0; border: 1px solid #718d79; border-radius: 7px; box-shadow: 0 0 0 2px rgba(113, 141, 121, .16), 0 8px 24px rgba(40, 62, 47, .14) !important; }
 
 /* Outline-first editor */

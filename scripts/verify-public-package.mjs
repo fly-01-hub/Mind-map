@@ -4,7 +4,7 @@ import path from 'node:path'
 import * as asar from '@electron/asar'
 
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter((file) => file && existsSync(file))
-const forbidden = /(?:^|\/)(?:release|IndexedDB|Local Storage|ResearchMind-data-before-[^/]*)(?:\/|$)|\.(?:researchmind|pdf|xmind|opml|mm|sqlite3?|db|ldb|pem|pfx|p12|jks|keystore|apk|aab)$/i
+const forbidden = /(?:^|\/)(?:release|IndexedDB|Local Storage|\.lan-private|ResearchMind-data-before-[^/]*)(?:\/|$)|(?:^|\/)config\/lan\.local\.json$|\.(?:researchmind|pdf|xmind|opml|mm|sqlite3?|db|ldb|pem|key|csr|crt|cer|pfx|p12|jks|keystore|apk|aab)$/i
 const rejected = files.filter((file) => forbidden.test(file) || /(?:^|\/)\.env(?:\.|$)/.test(file) && !file.endsWith('.env.example'))
 if (rejected.length) throw new Error(`Private/generated files must not be published: ${rejected.join(', ')}`)
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
@@ -18,6 +18,10 @@ function scan(directory) {
 }
 if (!existsSync('dist/index.html')) throw new Error('Build the production app before this audit')
 scan('dist')
+const pdfWorkers = readdirSync('dist/assets').filter((file) => /^pdf\.worker\.min-.*\.mjs$/.test(file))
+if (pdfWorkers.length !== 1 || !readFileSync('dist/sw.js', 'utf8').includes(`assets/${pdfWorkers[0]}`)) {
+  throw new Error('The PDF.js worker must be precached for first-time offline PDF imports')
+}
 const archive = 'release/win-unpacked/resources/app.asar'
 if (existsSync(archive)) {
   const contents = asar.listPackage(archive).map((file) => file.replaceAll('\\', '/'))

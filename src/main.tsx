@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import './android.css'
@@ -46,11 +46,14 @@ if (
   })
 }
 
+// GitHub Pages serves static files; hash routes can refresh without server rewrites.
+const Router = import.meta.env.MODE === 'pages' ? HashRouter : BrowserRouter
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <Router>
       <App />
-    </BrowserRouter>
+    </Router>
   </StrictMode>,
 )
 

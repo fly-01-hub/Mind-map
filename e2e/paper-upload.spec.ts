@@ -29,7 +29,11 @@ test('uploads one PDF and links it to multiple mind-map nodes without console er
 
   await page.reload()
   await page.locator('.me-tpc', { hasText: '分支丙项' }).first().click()
+  await page.waitForTimeout(650)
+  await expect(page.locator('.embedded-reader')).toHaveCount(0)
+  await page.locator('.me-tpc', { hasText: '分支丙项' }).first().dblclick()
   await expect(page.locator('.embedded-reader')).toBeVisible()
+  await expect(page.locator('#input-box[contenteditable]')).toHaveCount(0)
   await page.locator('.embedded-reader').getByRole('button', { name: '返回思维导图', exact: true }).click()
   await page.getByRole('button', { name: '节点详情' }).click()
   await expect(page.getByText('Attention Is All You Need', { exact: true })).toBeVisible()

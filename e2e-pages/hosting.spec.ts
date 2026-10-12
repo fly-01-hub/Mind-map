@@ -1,0 +1,40 @@
+import { expect, test } from '@playwright/test'
+import { createTestPdf } from '../e2e/testPdf'
+
+test('Pages supports an empty first launch, hash routes, saved maps and first offline PDF import', async ({ page, context }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('./')
+  await expect(page.getByText('这里还没有思维导图', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/Mind-map-download\/#\/library$/)
+  // Public hosting must download the whole precache before offline use is ready.
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 45_000 }).toBe(true)
+  const manifest = await page.evaluate(async () => (await fetch('manifest.webmanifest')).json())
+  expect(manifest.scope).toBe('/Mind-map-download/')
+  expect(manifest.start_url).toBe('/Mind-map-download/#/library')
+  await page.getByRole('button', { name: '新建思维导图', exact: true }).click()
+  await page.getByLabel('文档名称', { exact: true }).fill('Pages 保存验证')
+  await page.getByLabel('文档名称', { exact: true }).press('Enter')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await expect(page.locator('.me-tpc').first()).toBeVisible()
+  await expect(page.getByText('已保存到本地', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.me-tpc').first()).toBeVisible()
+  await context.setOffline(true)
+  await page.locator('.me-tpc').first().evaluate((element, bytes) => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([new Uint8Array(bytes)], 'Pages Offline.pdf', { type: 'application/pdf' }))
+    element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  }, Array.from(createTestPdf()))
+  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.textLayer span', { hasText: 'ResearchMind first page' })).toBeVisible()
+  await page.reload()
+  const paper = page.locator('.me-tpc', { hasText: 'Pages Offline' }).first()
+  await expect(paper).toBeVisible()
+  await paper.click()
+  await page.waitForTimeout(650)
+  await expect(page.locator('.embedded-reader')).toHaveCount(0)
+  await paper.dblclick({ delay: 100 })
+  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  expect(errors).toEqual([])
+})

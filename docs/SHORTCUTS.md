@@ -52,7 +52,7 @@
 - Ctrl + B/I/U、Ctrl + Enter、Alt + D/R/Y/G/B/P：设置整主题样式；编辑时作用于选中的局部文字
 - Alt + L、Ctrl + Shift + X：编辑时把选中文字设为行内代码或挖空
 - Alt + Enter：给当前主题添加完全保存在本地的图片
-- 双击主题：按点击位置进入文字编辑，可拖选局部文字后按 Backspace/Delete 删除；中键或空格 + 左键拖动：平移画布，松开空格即停止
+- 双击普通主题：按点击位置进入文字编辑，可拖选局部文字后按 Backspace/Delete 删除；双击 PDF 文献节点：打开左 PDF、右导图分栏；中键或空格 + 左键拖动：平移画布，松开空格即停止
 - 多选相邻同级主题后可创建概要；选择一个主题后点击“连接”，再点目标主题即可创建连接线
 - 输入法组合期间的 Enter 只确认候选词，不执行节点命令。代码同时检查 `KeyboardEvent.isComposing` 和 `compositionstart/compositionend`。
 

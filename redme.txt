@@ -1,70 +1,431 @@
-ResearchMind 枝间：维护与接手说明
-源码版本：1.7.5
+ResearchMind 枝间：完整项目接手说明（给新对话中的 AI）
+整理日期：2026-10-12，Asia/Shanghai
+项目目录：D:\app\siweidaotu
+源码版本：1.7.5；数据库 schema v3；完整备份格式 v1
+本文是私有源码仓库的维护交接，不是公开下载仓库的用户说明。保留 redme.txt 的现有拼写。
 
-公开下载与用户教程：https://github.com/fly-01-hub/Mind-map-download
-公开 EXE 下载：https://github.com/fly-01-hub/Mind-map-download/releases/latest
-本文件属于私有源码仓库的维护说明；公开下载仓库内另有面向用户的 README.md 和 redme.txt。
-私有源码仓库 fly-01-hub/Mind-map 不得改为公开，不得把它的分支、标签或历史推到公开下载仓库。
+============================================================
+最新补充：2026-10-12 免费发行与交互修复（优先于下文历史快照）
+============================================================
 
-1. 定位与约束
-本地优先、无账号、无云数据库、无遥测、无付费 API。思维导图和文档大纲共享同一份节点树；PDF 阅读与批注支持关联节点。不要损坏已有用户资料，也不要关闭或绕过操作系统安全保护。
+本轮用户明确要求执行免费分发和网址部署，并尽量代办。已完成：
+  - 发布版本 1.7.6，Windows x64 安装包已上传到公开下载仓库的 v1.7.6 Release。
+  - 源码仓库 fly-01-hub/Mind-map 的实际可见性已核对为 Private；保持私有。
+  - 免费网页版：https://fly-01-hub.github.io/Mind-map-download/
+  - 安装包：https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.6/ResearchMind-Setup-1.7.6-x64.exe
+  - EXE 大小 137166825 字节；SHA-256：6960D2B7EC1F832FA44EFAF92EBC23AB113A995DFC6C0D7E365D25D5AFBCDB9E。
+  - 公开 main 分支只放用户指南；gh-pages 分支有 90 个网页构建文件及 .nojekyll，使用独立 Git tree，不导入私有源码历史。
+  - Pages 采用 /Mind-map-download/ 下的 hash 路由和 PWA 作用域。未购买服务器、域名或订阅，也未增加账号或云数据库。
+  - PDF 文献节点改为单击选中、双击分栏；加减按钮仅在选中节点后显示，编辑时继续跟随输入框。
+  - npm run release:public 可自动检查、构建、发布并验证公网；脚本使用已有 GitHub 登录，凭据仅存进程内存。
+  - 维护说明见 docs/DISTRIBUTION.md；公开 README.md 和 redme.txt 已更新，未复制本私有交接文档到公开仓库。
+  - 60 单元、8 LAN 服务、67 浏览器回归、4 生产 PWA、6 桌面、1 Pages 本地和 1 公网 Pages 测试通过。
+  - 类型检查、lint、补丁检查、安装包资源比对和隐私审查通过。公网 index.html、sw.js、manifest.webmanifest 与本机 Pages 构建字节一致。
+  - 公网真实浏览器验证了新用户空白、hash 路由刷新、自动保存、首次离线 PDF 导入和双击重开；使用临时测试配置，没有操作用户真实知识库。
 
-2. 公开发行的初始状态
-新用户首次打开必须为空白知识库。不预置任何导图、文件夹、历史版本、PDF 或个人资料。
-documentRepository.initialize 只设置 initialized 元信息，不生成样例、不清空已有表。
-documentStore 的初始 documents/folders 均为空；随后从用户自己的数据库加载。
-测试样例位于 tests/fixtures，仅由隔离测试导入，不可被 src 的生产模块导入。
-已有安装覆盖升级后保留本人的数据，不应为了“空白发行”而清除用户数据库。
+说明：普通 Git 网络读取遇到连接重置后，公开网页发布改用 GitHub API；Pages 首次分支到达时可自动启用，脚本已处理该情况。桌面颜色测试修正了单个逻辑链接因局部格式拆成多个 span 时的定位，未修改对应产品功能。
+本轮没有安装新版 EXE 到用户日常应用，也没有更改证书信任、防火墙或 LAN 访问。原本机 http://127.0.0.1:4173 来源和资料空间保持不变；网页版资料空间独立，需通过完整备份迁移。
+旧 1.7.5 安装包保留；不要静默覆盖已发布同名包。完整源码工程不公开，但网页 JS 和 Electron 运行资源仍可被查看或提取。
+下文 1.7.5、未发布和未提交等记录为本轮开始前的历史快照；后续以 Git 状态、远端 Release/Pages 实际状态及本补充为准。
 
-3. 存储与备份
-Dexie 数据库名 zhijian-knowledge-db，数据库版本 v3；完整备份格式 v1。
-共 11 张表，包含文档、文件夹、历史版本、附件、论文/PDF、阅读状态、批注、节点关联和元信息。
-桌面固定来源 app://researchmind；网页不同来源、浏览器配置、桌面与安卓数据空间相互独立。
-跨设备使用界面的完整 .researchmind 备份。恢复是整体替换事务，失败回滚，不是合并。
-Windows 用户配置目录的离线副本不能直接作为安卓导入文件。
-备份未加密。用户主动选择的完整备份、PDF、数据库、真实截图、密钥均不得提交公开仓库。
+============================================================
+0. 三分钟接手：先了解当前状态
+============================================================
 
-4. 工程边界
-src/adapters/mindmap：Mind Elixir 适配器，不直接修改 node_modules。
-src/stores/documentStore.ts：共享文档树、编辑历史及持久化。
-src/features/outline：大纲编辑；src/features/mindmap：导图与节点菜单。
-src/repositories 与 src/db：本地存储；src/services：备份、导入导出与平台服务。
-electron/：Windows 桌面壳；android/：离线 WebView 壳。
-PDF 文件留在本地缓存，不依赖原外部路径；安卓不申请联网和所有文件权限。
+产品：本地优先的个人思维导图、大纲写作、论文 PDF 阅读与批注工具。
+用户主要使用导图；当前常用形态是从 http://127.0.0.1:4173 安装的网页/PWA，不应擅自认定为原生 EXE。
+核心要求：保留全部已有资料；新用户首次打开为空白；不关闭或绕过安全保护；源码保持私有。
+新增目标：“大家使用同一套软件，各自保存资料”，不是共享知识库，也不是多人实时协作。
 
-5. 最新功能
-节点“＋”跟随编辑框；紧凑右键菜单；选中文字六色与恢复正文色；同级单/多选排序和概要保护；编辑越界最小平移。
-双向链接、PDF 批注、大纲/导图共享、完整备份和历史版本保持兼容。
-详见 README.md 与 docs/ 下各功能说明。功能文档中的旧版本测试记录是历史，不是当前安装状态或当前发行包的保证。
+已完成：
+  - 新安装空白；完整本地备份/恢复；Windows、网页/PWA、安卓运行方式。
+  - 本地 PWA 首次离线导入 PDF 的工作线程预缓存修复。
+  - 独立 LAN HTTPS 只读程序服务、浏览器资料隔离测试。
+  - 用户明确授权后，生成本项目 CA、服务器证书及可分发的公开 CA 证书。
+  - 私有源码仓库与公开 EXE 下载仓库分离（历史交付，见第 9 节）。
 
-6. 发布与审查
-Node.js 24，先 npm ci。
-npm run typecheck / npm test / npm run lint：基础检查。
-npm run test:e2e：开发构建完整回归，使用临时浏览器配置和合成夹具。
-npm run test:public：生产构建首次打开空白与用户内容持久化验收。
-npm run verify:public：检查待发布源码、打包白名单与生产资源无样例数据。
-npm run desktop:build：构建 NSIS；npm run desktop:test：隔离桌面专项。
-npm run android:build：安卓离线包，需要 JDK 17/SDK；密钥私下保管，不提交。
-GitHub 仓库：https://github.com/fly-01-hub/Mind-map
-版本标签触发 Windows 构建与私有 Release 发布。发布前核对 git status 与远端，保留无关用户改动；不要无授权重写 Git 历史。
-公开发行使用独立新仓库 fly-01-hub/Mind-map-download，仅含 README.md、redme.txt 说明文档和 Release 的 EXE 附件。
-审查安装包、确认没有个人资料并核对 SHA-256 后，再上传公开 Release；同步更新版本、下载链接、校验值和教程。
-公开 Release 的标签仅指向说明文档提交，不能复用私有源码的提交；不得镜像推送或上传源码、构建日志、个人备份。
-GitHub 自动附带的 Source code ZIP/TAR 只包含公开下载仓库的说明文档，不是程序源码或安装包。
-EXE 内有运行所需的程序资源，仍可能被逆向提取；不公开源码仓库不等于绝对源码保密。
+尚未完成或不能宣称完成：
+  - 前期 AI 没有安装根证书、修改系统/浏览器信任、防火墙或建立开机任务。
+  - 未完成真实第二台电脑的 LAN HTTPS 验收，不能说局域网已全面开通。
+  - 后续 PDF/PWA 与 LAN 改动尚未提交/推送，没有据此发布新 EXE。
+  - 用户已安装 EXE、旧 PWA 缓存是否更新，不等同于本地源码/构建版本。
+  - 用户说已完成完整备份，但没有核实最新有效备份文件及保存位置。
 
-7. 安全与验证边界
-安装被安全保护拦截时停止并报告；不要改名、改哈希、停用保护或直接覆盖程序规避。
-测试必须用临时配置，不能在日常知识库创建测试导图或执行覆盖恢复。
-区分源码版本、构建产物和用户已安装版本。浏览器/桌面模拟验证不能宣称安卓真机验收。
-完整保留用户的本地旧资料和备份；它们不随源码或发行包发布。
+2026-10-12 本轮实查：
+  - Git 分支 main，HEAD aa3b457（docs: keep source private and document binary-only public distribution）。
+  - Node v24.15.0，npm 11.12.1；依赖和 dist 已存在，无需接手就盲目重装。
+  - 以太网 IPv4 192.168.1.19/24，网络类别 Public；有其他网卡，不可绑定全部接口。
+  - 未发现 TCP 4173 或 8443 监听。历史曾启动本地预览不代表现在仍运行。
+  - npm run lan:check 通过；90 个编译资源，当前证书有效并匹配 IP。
+  - typecheck、lint、60 项单元测试、8 项 LAN 服务测试、公开包审查通过。
+  - 本次只整理交接和执行相关校验，没有启动服务、安装软件、恢复资料或推送仓库。
 
-8. 面向用户的操作教程摘要
-本项目用于本地思维导图、大纲写作和 PDF 阅读批注，无需账号或服务器。
-下载安装：从公开 Release 的 Assets 下载 ResearchMind-Setup-1.7.5-x64.exe，双击按向导安装，从桌面或开始菜单启动。安全拦截时停止，不绕过。
-首次使用：全新知识库为空白，点击“新建思维导图”；大纲里 Enter 添加同级，Tab 缩进，Shift+Tab 提升；Ctrl+Alt+Shift+M 切换大纲/导图；Ctrl+/ 查看操作指南。
-备份：首页“备份与恢复 → 创建完整备份”，把 .researchmind 文件保存到自己选择的安全目录，等待完成提示并另存一份。
-恢复：先备份目标应用现有内容，再“备份与恢复 → 从备份恢复”选择文件；确认整体替换数据库，不是合并。
-升级：先备份并关闭旧版，再运行新版 EXE 正常覆盖安装，不清理配置或数据库；已有用户数据保留。没有自动升级服务。
-网页/PWA 和桌面版数据空间独立，迁移用完整备份；自动保存不等于备份，备份未加密，不上传公开仓库。
-详细教程及当前公开版本信息以公开下载仓库 README.md、redme.txt 为准。
+这些是时间点快照。新 AI 应先重新核对，不要把本文当作实时进程状态或新的操作授权。
+
+============================================================
+1. 接手流程与不可越过的边界
+============================================================
+
+1) 完整阅读本文件和 README.md；局域网任务再读 docs/LAN.md。
+2) 检查适用的 AGENTS.md、git status --short、git diff、package.json 和实际文件。
+3) 分清用户本轮是“解释”“诊断”还是“实施”；文档整理不授权安装、发布或改安全设置。
+4) 保留 dirty worktree；下述未提交内容是前期工作，不可当作垃圾或无授权丢弃。
+5) 修改功能先定位领域数据流，在临时浏览器/应用配置测试，再按风险验证。
+6) 交付区分：源码、网页构建、服务、客户端缓存、安装包、已安装程序、远端发行。
+
+硬约束：
+  - 不清空 IndexedDB、站点数据、ResearchMind 用户配置或用户完整备份。
+  - 新用户空白不等于升级清空旧用户；不得用清库满足“空白发行”。
+  - 不在日常知识库创建测试导图、修改标题或执行覆盖恢复。
+  - 连接失败或遇安全拦截时停止并报告；不关闭 SmartScreen、SAC、Defender、防火墙或 TLS 校验。
+  - 不用改名、改哈希、换端口规避安全规则；不设浏览器 insecure-origin/忽略证书选项。
+  - 不静默安装 CA，不擅自修改其他电脑、路由器、网络类别、开机任务或证书信任。
+  - 不上传真实导图、论文、备份、数据库、截图、签名密钥、CA 私钥或凭据。
+  - 不把私有源码仓库改为公开，不镜像推送它的分支、标签和历史。
+  - 不直接改 node_modules，不无授权重写 Git 历史或进行破坏性清理。
+
+历史原生电脑控制曾失败，报 native pipe not found / os error 2；本轮未重测原生窗口连接。
+不能据此宣称原生窗口可读或已替用户操作安装器；未来需要原生控制时先验证通道，失败则报告。
+
+============================================================
+2. 产品功能与技术栈
+============================================================
+
+技术：React 19、TypeScript、Vite 8、Zustand、Dexie/IndexedDB、Mind Elixir 6、PDF.js、PWA、Electron Windows 壳、Android WebView 离线壳。
+依赖版本以 package.json / package-lock.json 为准；Node.js 24，不为接手主动升级依赖。
+
+功能：
+  - 导图/大纲共用节点树；编辑、拖拽、折叠、排序、多选、撤销/重做。
+  - 嵌套文件夹、收藏、回收站、搜索、历史版本；紧凑布局、配色、概要与跨主题连接。
+  - 富文本、局部颜色、描述、标签、待办、图片、表格、公式、笔记和附件。
+  - [[文档名称]] 双向链接、反向引用、打开/新建目标和节点定位。
+  - PDF 拖入建立文献节点，左 PDF / 右导图分栏及独立阅读器。
+  - 文字高亮、下划线、笔记、区域批注/截图、标签、批注与节点多对多引用及双向定位。
+  - .researchmind 全量备份/恢复，多种结构交换格式，完整 PNG/打印等导出。
+  - 节点“＋”随编辑框，紧凑右键菜单，六色与恢复正文色，同级排序保护，越界最小平移。
+
+无需账号、云数据库、遥测或付费 API；AIProvider / PaperAIProvider 是离线 Mock 接口，不是真实联网 AI。
+固定 local-demo-user 是兼容字段，不是云账号或多人隔离机制；隔离来自浏览器配置/来源。
+本轮 src 未发现 Supabase 接入；磁盘残留 supabase、.vercel 等目录不代表现有运行依赖云服务，不要据目录名恢复登录/云数据库。
+
+============================================================
+3. 目录和代码定位
+============================================================
+
+README.md                         项目简介、运行和公开下载。
+redme.txt                         本接手入口。
+src/main.tsx / src/App.tsx         引导、PWA 更新、初始化和路由。
+src/types/                        NodeData、文档、论文、批注类型。
+src/stores/documentStore.ts       领域树命令、剪贴板、内存 undo/redo。
+src/stores/paperStore.ts          论文/批注索引；其余 Store 分离选择、界面和保存状态。
+src/adapters/mindmap/             MindMapEngineAdapter，隔离第三方引擎。
+src/features/library/            知识库和文档管理。
+src/features/outline/            大纲编辑器。
+src/features/mindmap/            导图、快捷键、节点菜单和工具条。
+src/features/nodeInspector/      节点详情和普通附件。
+src/features/documentLinks/      文档链接与引用。
+src/features/paper/              PDF 阅读、批注覆盖层、来源和全局批注页。
+src/features/backup/             备份/恢复 UI。
+src/db/appDatabase.ts            实际 Dexie schema；不存在 src/db/database.ts。
+src/db/migrations.ts             历史文档兼容。
+src/repositories/                数据库读写边界。
+src/services/persistence/        防抖保存队列与 flush。
+src/services/backup/             localBackupService，备份校验/事务恢复。
+src/services/pdf/ 与 paper/      PDF 解析/保存、批注到节点事务。
+src/services/export/             下载、Markdown/结构交换。
+src/services/platform/           安卓文件桥接。
+src/utils/                       树、排序、富文本、链接、视区及单元测试。
+electron/main.cjs                 Windows 壳，固定 app://researchmind。
+android/                         WebView、Gradle、系统文件选择/保存。
+vite.config.ts                   PWA manifest 与预缓存。
+scripts/lan-server.mjs           独立 LAN HTTPS 入口。
+scripts/lan/static-server.mjs    TLS、网段、Host、静态资源、只读限制。
+scripts/lan-certificate-request.mjs 服务器私钥/CSR；不自动签发 CA 或配置信任。
+scripts/verify-public-package.mjs   发布隐私/白名单/样例/worker 审查。
+config/lan.example.json          可提交的通用配置。
+config/lan.local.json            本机配置，被忽略。
+.lan-private/                   密钥与证书，只留在安全的本机位置，被忽略。
+tests/fixtures/                  合成夹具，不能从生产 src 导入。
+e2e/、e2e-public/、e2e-lan/、e2e-desktop/、e2e-android/  隔离专项。
+.github/workflows/windows-release.yml  Windows CI/私有 Release。
+dist/                           生成网页；不能只手改 dist 而不改源码。
+release/                        历史包、展开程序、截图、备份副本及记录；不能整目录公开。
+思维导图备份/                   本机候选备份目录，本轮未读取内容或认定哪个最新有效。
+logs/handoff/                   原 redme 副本，被 Git 忽略。
+
+数据流：React Features → Zustand → NodeData/领域服务 → Repository → IndexedDB。
+大纲直接操作 NodeData；导图由适配器生成 Mind Elixir NodeObj，再将引擎操作转换回领域树。
+禁止两个视图维护独立持久化节点树；hover、临时选择和导图缩放/平移不写入数据库。
+
+============================================================
+4. 本地资料、保存与备份
+============================================================
+
+数据库 zhijian-knowledge-db，schema version 3，共 11 张表：
+documents、folders、versions、attachmentBlobs、papers、paperFiles、paperReadingStates、paperAnnotations、nodePaperRelations、annotationNodeRelations、meta。
+初始化只补 initialized 元信息；不生成样例，不清空已有记录。
+文档约 350ms 防抖保存，文件夹立即保存；队列串行执行，防旧保存覆盖新状态。
+持久化快照约 120 秒触发，每文档最近 50 条；内存 undo/redo 不跨重启。
+PDF Blob 在 paperFiles，用 SHA-256 去重；附件在 attachmentBlobs，不依赖原外部文件路径。
+批注/节点/论文关系事务维护；解除引用不等于删除论文或批注。
+
+完整备份：单个 .researchmind，标识 researchmind-local-backup，格式 version 1。
+包含全部 11 张表、PDF/附件二进制（Base64）、历史、回收站、批注和关系。
+恢复先校验，再单个事务整体替换全部表，失败回滚；不是合并或自动同步。
+不包含程序、系统配置、localStorage 界面偏好、内存撤销栈。
+备份未加密，Base64 不是加密；大资料库有体积和内存开销，不得公开上传。
+Markdown/OPML/FreeMind/XMind 等不是全量备份，不能替代 .researchmind。
+
+数据空间：
+  本人原网页/PWA：http://127.0.0.1:4173。
+  Windows 桌面：app://researchmind；用户目录以 app.getPath('userData') 为准，不凭名称猜。
+  LAN HTTPS：https://192.168.1.19:8443（本机当前配置）。
+  安卓：WebView 固定本地 HTTPS 来源，独立于以上空间。
+localhost/127.0.0.1、HTTP/HTTPS、端口/域名或浏览器配置变化，都可能打开另一份空白库。
+空白先核对来源/配置，不能立即判定资料被删，也不能擅自导入覆盖。
+跨设备用用户明确选择的完整备份；Windows 配置目录副本不能直接导入安卓。
+
+用户历史已确认备份完成，但最新有效完整备份路径未核实。
+release 中的旧 ResearchMind-data-before-* 记录和截图必须保留，不能冒充最新 .researchmind。
+
+============================================================
+5. 新用户空白与 LAN 资料隔离
+============================================================
+
+新安装/新浏览器数据空间第一次打开为空白，无导图、文件夹、PDF、附件或历史。
+已有用户升级保留自己的资料；用户主动新建或导入后才有内容。
+LAN 仅共享编译程序，不读取浏览器用户配置，不接收资料上传，不建服务器数据库。
+两个独立浏览器配置测试通过：A 创建导图/PDF 后，B 仍为空白；各自保存/重开互不影响。
+同一电脑多人使用同一浏览器配置仍共享该配置，应使用独立浏览器配置/Windows 用户。
+这不是账号鉴权、同步、云备份或多人实时编辑。不要为预期本地隔离加入登录/共享后端。
+不要给普通用户分发本人备份、浏览器配置或整个工程/发行目录。
+
+============================================================
+6. 最近 PDF/PWA 修复与原地址更新
+============================================================
+
+2026-10-10 症状：导图可用，PDF 导入报 Setting up fake worker failed / Failed to fetch dynamically imported module，路径 assets/pdf.worker.min-*.mjs。
+原因：Workbox globPatterns 没含 .mjs；程序可从缓存打开，worker 仍依赖服务在线。
+修复：vite.config.ts 加入 mjs；verify-public-package.mjs 检查唯一 worker 在 sw.js 中。
+e2e-public/pdf-offline.spec.ts 验证首次 PDF 打开前预缓存、离线首次拖入、渲染、保存/重开。
+PWA 为 autoUpdate；src/main.tsx 检查更新并在控制权变化时重载。提醒用户先保存/备份，不清站点数据强制刷新。
+
+历史在原 4173 启动并验证过 /library、worker HTTP 200、正确 MIME 和 SW no-cache；2026-10-12 无此端口监听。
+dist 有本地修复构建；release/win-unpacked 有 1.7.5 展开程序，不等于用户覆盖安装。
+没有据此更新远端 1.7.5 EXE；不能宣称公开安装包包含此次修复。
+不要更改 app:// 协议、用户来源或重装浏览器来处理 worker 缺失。
+
+============================================================
+7. LAN HTTPS、证书与授权边界
+============================================================
+
+详见 docs/LAN.md。正式服务单私有 IPv4 网卡、allowedClientSubnets/Host 限制，不绑定 0.0.0.0。
+HTTPS 最低 TLS 1.2，检查日期、非 CA 服务器证书、SAN 和私钥匹配。
+只接受 GET/HEAD；只服务编译资源，拒绝源码、密钥、备份、PDF、source map 和路径穿越。
+启动时读取编译文件到内存，更新 dist 后须正常重启服务。
+PDF worker 必须存在并预缓存；有正确 .mjs MIME、SPA 深链接、SW no-cache 和哈希资源缓存。
+127.0.0.1:5198 HTTP 是自动测试回环服务，不是 LAN HTTP 模式；正式 CLI 无 HTTPS 绕过选项。
+
+本机配置（2026-10-12，不能照搬到其他机器）：
+  listenAddress 192.168.1.19；port 8443。
+  publicOrigin https://192.168.1.19:8443；allowedClientSubnets 192.168.1.0/24。
+  certificateFile ../.lan-private/server-cert.pem。
+  privateKeyFile ../.lan-private/server-key.pem。
+其他网卡不可顺带暴露；由管理员安排固定 DHCP 地址/域名。改来源会变资料空间，证书也需核对。
+
+用户明确授权：只生成受保护证书文件，不安装根证书、不改防火墙。
+已用 Git 自带 OpenSSL（C:\Program Files\Git\usr\bin\openssl.exe）生成 RSA 4096 CA，签发原 RSA 3072 CSR；服务器密钥未替换。
+CA 名称 ResearchMind LAN CA 728afe5a，有效至 2031-10-10。
+服务器 SAN IP:192.168.1.19，有效至 2027-10-11；精确时间以证书为准。
+CA SHA-256 指纹：
+5C:0C:B1:22:39:38:BD:08:6A:64:94:33:06:22:06:CD:89:78:BF:DA:85:33:D5:40:72:96:AE:4F:79:EE:6C:DC
+OpenSSL 严格证书链/sslserver/IP 核验、密钥匹配、公开导出一致性和 lan:check 通过。
+
+绝不能分发：ca-key.pem、server-key.pem 或整个 .lan-private。
+私钥未加口令；目录 ACL 仅部署用户、SYSTEM、Administrators。CA 私钥建议离线保管，运行服务不需要它。
+可单独分发：.lan-private/client-trust/ResearchMind-LAN-CA.cer 与说明.txt；只有公开证书/说明。
+公开 .cer 为 DER，其 SHA-256 文件哈希等于上述指纹去掉冒号；客户端须核对来源/指纹。
+不要随意重建/覆盖 CA，避免破坏信任。lan:cert-request 只生成服务器 key/CSR，已存在时拒绝覆盖，不是 CA 自动续期。
+
+仍需单独完成：
+  - 客户端批准并配置信任；根证书导入会改变信任，不能静默做。
+  - 经批准、限定网卡/地址/Node.exe/网段/端口/网络配置文件的防火墙访问。
+  - 真实第二台电脑 HTTPS、新用户空白和各自资料验证。
+AI 未改本机 Public 类别、开放端口或安装信任；没有持久服务/开机任务，2026-10-12 8443 未监听。
+文件生成不等于浏览器信任，配置检查不等于跨电脑可达；不点击“继续访问”绕过证书错误。
+
+============================================================
+8. 运行、测试与构建
+============================================================
+
+在 D:\app\siweidaotu 的 PowerShell 执行，先检查端口和本轮授权。
+依赖已存在；需要重建依赖才 npm ci，不为文档/状态查询执行安装。
+
+开发：
+  npm run dev -- --host 127.0.0.1
+  打开实际地址，不把开发来源当作用户原资料空间。
+
+本人原网页/PWA 更新（用户要求实施时）：
+  npm run build
+  npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
+  固定 http://127.0.0.1:4173/library，不卸载 PWA、不清 IndexedDB。
+  preview 是本机预览；LAN 使用独立 HTTPS 服务。
+
+LAN（信任及网络授权另行确认）：
+  npm run lan:check
+  npm run lan:serve
+  保持终端运行；客户端打开 https://192.168.1.19:8443/library，首次应为空白。
+
+验证：
+  npm run typecheck                  tsc。
+  npm run lint                       oxlint。
+  npm test                           Vitest，合成数据/测试数据库。
+  npm run test:e2e                    Chrome 开发核心回归，端口 5176。
+  npm run test:public                 先构建，生产空白/持久化/离线 PDF，端口 5186。
+  npm run test:lan                    Node 服务/TLS/只读/路径/网段。
+  npm run test:lan:browser            要求 dist 已构建，两个临时浏览器配置，回环 5198。
+  npm run verify:public              发布文件/白名单/生产资源审查。
+  git diff --check                    补丁空白；CRLF 提示不是功能失败。
+PowerShell 连续命令逐项检查 $LASTEXITCODE，不能把最后一项成功当作全成功。
+
+Windows：
+  npm run desktop:start              核实/安装 Electron 运行时、构建并打开桌面壳。
+  npm run desktop:unpacked           生成 release/win-unpacked，不是覆盖安装。
+  npm run desktop:test               临时配置专项，不读写日常知识库。
+  npm run desktop:build -- --publish never  构建 NSIS，禁止构建阶段自动发布。
+  输出 release/ResearchMind-Setup-<version>-x64.exe，真实构建成功才能宣称新 EXE 存在。
+  desktop 启动/构建含官方运行时安装脚本，首次可能联网，不为只查状态执行。
+  ELECTRON_RUN_AS_NODE 曾导致退出；测试只移除子进程该变量，不改安全设置。
+  verify-installed-desktop.mjs 会启动日常配置、打开已有内容并存截图，不是纯文件检查，不默认运行。
+  本轮未确认实际已安装旧 EXE 的位置/版本；win-unpacked 不是已安装目录。
+
+Android：
+  npm run android:build              需 JDK 17、Android SDK/Gradle，见 docs/ANDROID.md。
+  npm run android:test               触屏/桥接模拟，不是真机。
+  android:prepare 只更新 android/app/src/main/assets/web/，不可扩展删除范围。
+  最低 Android 9/API 28，还需新版 WebView；不申请联网/所有文件访问权限。
+  个人 APK 调试签名，升级须保留同一密钥并递增 versionCode，不能先卸载带资料应用。
+  单次导出限制 512 MB；真实设备文件选择器、输入法和升级仍需验证。
+
+============================================================
+9. 私有源码与公开下载：不能混淆
+============================================================
+
+私有源码：https://github.com/fly-01-hub/Mind-map
+本机 origin：https://github.com/fly-01-hub/Mind-map.git
+公开下载：https://github.com/fly-01-hub/Mind-map-download
+公开发行页：https://github.com/fly-01-hub/Mind-map-download/releases/latest
+历史 1.7.5 EXE：https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.5/ResearchMind-Setup-1.7.5-x64.exe
+
+历史交付：独立公开仓库仅 README.md、redme.txt 和 Release EXE，源码仓库私有。
+不可共享私有历史；公开仓库自动 Source code ZIP/TAR 只有说明，不是应用源码或 EXE。
+历史公开 1.7.5 大小 135717563 字节；SHA-256：
+24A51A9AF9FEE03C89F5790A174FAC30D9918A5E0E3013E33A6E22BB85ED67E1
+本轮未联机重查远端可见性/Release/附件，未来发行前必须核验。
+本轮 release 顶层没有 1.7.5 安装器，仍有 1.7.4 等旧包，不能凭 package.json 认定安装器已生成。
+EXE 内运行资源可能被逆向；不公开源码仓库不等于绝对保密。
+
+打包白名单：dist/**/*、electron/**/*、package.json（运行依赖由打包器处理）。
+.gitignore 排除 release、用户配置、数据库、PDF、完整备份、环境变量、安卓/TLS 密钥。
+verify:public 检查待发布文件、白名单、无样例、worker；存在 app.asar 时比对资源/版本。
+忽略规则不等于充分隐私审查，尤其要检查用户放入的截图/压缩包。
+CI：.github/workflows/windows-release.yml；v* 标签触发 Windows 构建/测试与私有 Release。
+CI contents:write 不表示能把私有历史推给公开仓库。
+
+用户明确授权发行后：
+  - 确认版本、Git diff、远端和范围，保留无关改动。
+  - 跑对应测试/构建/产物审查与 SHA-256。
+  - 私有源码按授权提交/推送；公开仓库仅同步用户教程与选定 EXE。
+  - 更新公开版本/链接/哈希，不静默替换同名 EXE 或把本地修改当作已发布。
+  - 不上传整个 release、dist、工程 ZIP、test-results、logs、.lan-private。
+  - 不输出 token/凭据，不无授权改可见性、重写历史或删除发行。
+
+============================================================
+10. 未提交改动（2026-10-12）
+============================================================
+
+已修改：
+  vite.config.ts：PDF .mjs 预缓存。
+  scripts/verify-public-package.mjs：worker 检查、LAN 私密文件拦截。
+  package.json：LAN 服务/证书申请/测试命令，版本仍 1.7.5。
+  .gitignore：LAN 本机配置、私密目录、证书格式排除。
+  .github/workflows/windows-release.yml：LAN 安全/隔离检查。
+  README.md、redme.txt：说明、修复、LAN 与本次交接。
+
+新增未跟踪：
+  config/lan.example.json（lan.local.json 被忽略）。
+  docs/LAN.md、e2e-public/pdf-offline.spec.ts。
+  e2e-lan/isolation.spec.ts、playwright.lan.config.ts。
+  scripts/lan-server.mjs、lan-certificate-request.mjs、lan-loopback-test-server.mjs、lan/static-server.mjs。
+  tests/lan/server.test.mjs。
+
+保留上述工作；不要只提交文档漏掉新服务，也不要 git add -f 加入密钥/本机配置。
+当前功能未推送；本交接不授权自动提交、发版或改公开仓库。
+
+============================================================
+11. 验证记录：历史与本轮分开
+============================================================
+
+2026-10-11 历史：
+  60 单元 + 8 LAN 服务 + 2 LAN 浏览器隔离/离线 PDF + 4 生产 PWA，共 74 项通过。
+  typecheck、lint（无警告）、git diff --check、verify:public 通过。
+  TLS 测试只给临时测试客户端显式 CA，没有关闭校验或改系统/浏览器根证书。
+  回环来源、临时配置不等于真实第二台电脑 HTTPS 验收。
+
+2026-10-12 本次实测：
+  typecheck、lint、60 项单元、8 项 LAN 服务通过。
+  lan:check 通过；verify:public 通过（187 个审查文件，生产无预置导图）。
+  本次未重跑以上 6 项浏览器测试，不把历史结果伪装成今天执行。
+  未重新构建/安装 EXE、连接安卓真机、操控原生窗口、访问第二台电脑或改系统信任。
+功能/构建变化后的发布须重跑相关专项，不仅依赖旧统计。
+
+============================================================
+12. 待办与接手顺序（不是操作授权）
+============================================================
+
+A. 确认用户使用的浏览器/PWA/EXE、原来源与有效备份，不自动恢复。
+B. 若要求更新本人网页：核对 4173，正常启动同源服务，验证 worker/SW；不清资料。
+C. 若要求开通 LAN：先取得客户端信任/网络规则的明确授权与管理权限，限定范围配置，不静默装 CA。
+D. 真实另一电脑验收：无证书错误、首次空白、新建/重开、PDF 导入/阅读、备份、与本人资料互不可见。
+E. 连接失败/安全拦截：停止，报告错误并交管理员处理，不找规避方式。
+F. 若要求发行：确认版本与授权，提交完整改动，构建/审查新 EXE，再更新公开二进制仓库。
+G. 安卓按用户需要继续真机验证，不把模拟当作已安装到平板。
+
+当前最新请求仅整理接手文档，没有授权本轮启动 LAN、安装证书、改防火墙或发布。
+
+============================================================
+13. 操作摘要、限制与文档导航
+============================================================
+
+首次空白，点击“新建思维导图”；大纲 Enter 同级、Tab 缩进、Shift+Tab 提升。
+Ctrl+Alt+Shift+M 切换大纲/导图，Ctrl+/ 操作指南；以现行快捷键文档/代码为准。
+备份：首页“备份与恢复 → 创建完整备份”，选安全目录，等成功并另存一份。
+恢复：先备份目标资料，再选择 .researchmind 确认整体替换，不是合并。
+原生升级：明确要求且已备份后，关闭旧程序，安装器正常覆盖，不清配置；安全拦截停止。
+LAN 用户：确认 CA 来源/指纹并批准信任，服务/网络就绪后开 HTTPS 地址，首次为空白。
+保持固定地址与自己的浏览器配置，避免隐私模式，定期本机备份；不会自动同步。
+
+限制：无云同步、实时协作、真实 AI、OCR、批注写回 PDF、连续多页阅读或完整手机体验。
+扫描 PDF 无文字层不能划词/全文搜索；可区域截图但无 OCR。
+超大备份/Canvas 有设备和内存限制，格式交换不保证富字段全无损，不宣称零缺陷或完整复刻幕布/Logseq。
+Windows 尚无可信商业签名，提醒/拦截时不关闭保护；源码、缓存、安装包、已安装程序不自动同步。
+
+按需阅读：
+  docs/ARCHITECTURE.md：数据流、保存、阅读器、链接和服务边界。
+  docs/DATA_MODEL.md：字段、表、版本与备份。
+  docs/KNOWN_ISSUES.md：未实现与设备限制。
+  docs/LAN.md：HTTPS、证书、网络、隔离、客户端与验收。
+  docs/PDF_KNOWLEDGE.md、DOCUMENT_LINKS.md：文献/批注/引用和链接。
+  docs/NODE_CONTROLS.md、TEXT_COLORS.md、NODE_ORDER.md、VIEWPORT_STABILITY.md：近期交互。
+  docs/SHORTCUTS.md：操作指南。
+  docs/ANDROID.md：APK、文件桥、签名、构建和真机边界。
+  docs/PRODUCT.md、PRODUCT_REVIEW.md、ROADMAP.md：背景/历史规划，勾选不表示所有候选已交付。
+
+============================================================
+14. 给新对话的可复制开场
+============================================================
+
+请接手 D:\app\siweidaotu 的枝间 · ResearchMind。先完整阅读 redme.txt 与 README.md，必要时读 docs/LAN.md。先核对 Git 改动、实际来源/端口、版本与我本轮要求，不把历史测试当作实时部署。保留我的全部导图、PDF、备份和浏览器数据，新用户首次为空白。源码仓库私有，公开下载仓库仅放说明与 EXE。LAN 只共享程序、各自保存资料，CA/服务器证书文件已生成，但系统信任、防火墙和真实跨电脑验收未由此前 AI 完成。不要自动安装证书、改安全设置、恢复数据库或发布；连接失败或安全拦截时停止并报告。读完简要说明现状，并按我新的具体指令继续。
+
+本次整理前 redme 副本：logs/handoff/redme.before-2026-10-12.txt（忽略目录，仅供恢复旧说明）。
+后续交接更新日期、真实完成事项、未提交内容、验证日期与部署/授权边界，避免累积过期结论。

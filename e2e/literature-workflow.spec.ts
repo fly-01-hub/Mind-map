@@ -23,7 +23,7 @@ async function selectText(page: Page, text = 'ResearchMind first page') {
   })
 }
 
-test('dropping literature opens PDF left, map right; single click reopens the paper', async ({ page }) => {
+test('dropping literature opens PDF left, map right; only double click reopens the paper', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message))
   await dropPdf(page)
   const pdf = (await page.locator('.map-paper-pane').boundingBox())!
@@ -32,10 +32,16 @@ test('dropping literature opens PDF left, map right; single click reopens the pa
   await page.locator('.embedded-reader').getByRole('button', { name: '返回思维导图' }).click()
   await expect(page.locator('.embedded-reader')).toHaveCount(0)
   await page.locator('.me-tpc', { hasText: 'Literature' }).first().click()
+  // Wait beyond the former delayed single-click action.
+  await page.waitForTimeout(650)
+  await expect(page.locator('.embedded-reader')).toHaveCount(0)
+  await expect(page.locator('.me-tpc', { hasText: 'Literature' }).first()).toHaveClass(/selected/)
+  await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick({ delay: 100 })
   await expect(page.locator('.embedded-reader')).toBeVisible()
+  await expect(page.locator('#input-box[contenteditable]')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/literature-split.png', fullPage: true })
   await page.reload()
-  await page.locator('.me-tpc', { hasText: 'Literature' }).first().click()
+  await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick()
   await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
   expect(errors).toEqual([])
 })
@@ -172,7 +178,7 @@ test('rectangle highlight fills the entire region, extracts its text and survive
   await expect(mark).toHaveCount(1)
   await page.screenshot({ path: 'test-results/rectangle-highlight.png', fullPage: true })
   await page.reload()
-  await page.locator('.me-tpc', { hasText: 'Literature' }).first().click()
+  await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick()
   await expect(mark).toHaveCount(1)
   await expect(mark).toHaveAttribute('data-color', 'green')
 })
@@ -210,7 +216,7 @@ test('legacy oversize fragmented boxes are reanchored to exact text without rewr
     return { id: annotation.id, positionData }
   })
   await page.reload()
-  await page.locator('.me-tpc', { hasText: 'Literature' }).first().click()
+  await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick()
   await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
   const mark = page.locator('.paper-annotation-mark.highlight')
   await expect(mark).toHaveCount(1)
@@ -237,7 +243,7 @@ test('identical quotations stay anchored to the selected occurrence after reload
   })
   await page.getByRole('button', { name: '高亮', exact: true }).click()
   await page.reload()
-  await page.locator('.me-tpc', { hasText: 'Repeated' }).first().click()
+  await page.locator('.me-tpc', { hasText: 'Repeated' }).first().dblclick()
   const mark = page.locator('.paper-annotation-mark.highlight')
   await expect(mark).toHaveCount(1)
   const second = (await page.locator('.embedded-reader .textLayer span', { hasText: 'Repeat phrase' }).nth(1).boundingBox())!

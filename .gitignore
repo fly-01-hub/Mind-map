@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-pages
 dist-ssr
 *.local
 coverage
@@ -59,3 +60,11 @@ ResearchMind-data-before-*/
 .env
 .env.*
 !.env.example
+
+# LAN deployment identity, TLS material and machine-specific network settings
+.lan-private/
+config/lan.local.json
+*.key
+*.csr
+*.crt
+*.cer

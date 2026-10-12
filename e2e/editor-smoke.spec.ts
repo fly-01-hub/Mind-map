@@ -75,6 +75,8 @@ test('library opens a right-facing editable map without console errors', async (
   expect(childBox!.x).toBeGreaterThan(rootBox!.x)
 
   await child.hover()
+  await expect(page.getByRole('button', { name: '折叠下级' })).toHaveCount(0)
+  await child.click()
   await expect(page.getByRole('button', { name: '折叠下级' })).toBeVisible()
   await page.getByRole('button', { name: '折叠下级' }).click()
   await expect(topics).toHaveCount(8)

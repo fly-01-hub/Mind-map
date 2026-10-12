@@ -73,7 +73,7 @@ export function ShortcutHelpDialog({ open, onOpenChange }: { open: boolean; onOp
             </section>
             <section className="shortcut-feature">
               <FileText size={18} />
-              <div><strong>导图优先操作</strong><span>双击主题编辑；Shift + 点击、Shift + ↑/↓ 或空白处拖框可多选，按住鼠标中键平移。底部主题栏可直接添加主题、待办、描述、图片、概要与连接线。</span></div>
+              <div><strong>导图优先操作</strong><span>双击普通主题编辑，双击 PDF 文献节点打开分栏；选中节点后显示加减按钮。Shift + 点击、Shift + ↑/↓ 或空白处拖框可多选，按住鼠标中键平移。底部主题栏可直接添加主题、待办、描述、图片、概要与连接线。</span></div>
             </section>
           </div>
           <div className="shortcut-columns">

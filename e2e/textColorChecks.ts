@@ -86,7 +86,8 @@ export async function checkTextColors(page: Page, screenshots: string, touchPale
   await editor.press('Escape')
   await page.screenshot({ path: `${screenshots}-saved.png` })
   const currentUrl = page.url()
-  const wiki = topic.locator('.wiki-link[data-wiki-name="颜色测试目标"]')
+  // Partial text formatting may split one logical link into adjacent spans.
+  const wiki = topic.locator('.wiki-link[data-wiki-name="颜色测试目标"]').first()
   await wiki.dblclick()
   await expect(page.getByLabel('文档名称', { exact: true })).toHaveValue('颜色测试目标')
   await page.goto(currentUrl)

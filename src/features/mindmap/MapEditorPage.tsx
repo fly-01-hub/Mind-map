@@ -102,7 +102,6 @@ export function MapEditorPage() {
   const [readOnly, setReadOnly] = useState(false)
   const [readingPaper, setReadingPaper] = useState<{ paperId: string; annotationId?: string; nodeId?: string; locationKey: number }>()
   const [paperPickerOpen, setPaperPickerOpen] = useState(false)
-  const paperOpenTimerRef = useRef<number | undefined>(undefined)
   const [presentationMode, setPresentationMode] = useState(false)
   const [backlinksOpen, setBacklinksOpen] = useState(false)
   const [ambiguousLink, setAmbiguousLink] = useState<string>()
@@ -249,7 +248,7 @@ export function MapEditorPage() {
     if (id) openDocument(id)
     setReadingPaper(undefined)
     setPaperPickerOpen(false)
-    return () => { setFocusRoot(undefined); window.clearTimeout(paperOpenTimerRef.current) }
+    return () => { setFocusRoot(undefined) }
   }, [id, openDocument, setFocusRoot])
 
   useEffect(() => {
@@ -847,7 +846,7 @@ export function MapEditorPage() {
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
       </header>
-      {paperPickerOpen && <div className="paper-picker"><strong>左侧论文 · 右侧导图</strong><p>把 PDF 文件直接拖到导图，即可创建文献节点。点击文献节点打开分栏。</p><button onClick={() => navigate('/annotations')}>论文与批注管理 →</button>{papers.map((paper) => <button key={paper.id} onClick={() => openPaper(paper.id)}>📄 {paper.title}</button>)}</div>}
+      {paperPickerOpen && <div className="paper-picker"><strong>左侧论文 · 右侧导图</strong><p>把 PDF 文件直接拖到导图，即可创建文献节点。双击文献节点打开分栏。</p><button onClick={() => navigate('/annotations')}>论文与批注管理 →</button>{papers.map((paper) => <button key={paper.id} onClick={() => openPaper(paper.id)}>📄 {paper.title}</button>)}</div>}
       {breadcrumbs.length > 0 && <div className="focus-breadcrumb"><Focus size={14} />{breadcrumbs.map((node, index) => <span key={node.id}><button onClick={() => index === 0 ? setFocusRoot(undefined) : setFocusRoot(node.id)}>{node.title}</button>{index < breadcrumbs.length - 1 && <ChevronRight size={13} />}</span>)}</div>}
       {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => {
         useDocumentStore.getState().revealNode(result.nodeId)
@@ -893,6 +892,9 @@ export function MapEditorPage() {
           onPointerDownCapture={(event) => {
             const target = event.target as HTMLElement
             if (target.closest('.node-quick-actions, .canvas-controls')) return
+            // The engine's selection area treats its expander as outside the
+            // topic. Keep selection until the expander's click toggles children.
+            if (target.closest('.me-epd')) { event.stopPropagation(); return }
             if (!target.closest('[contenteditable="true"]')) event.currentTarget.focus({ preventScroll: true })
             const anchor = adapterRef.current?.resolveNode(target)
             const blankCanvasPress = event.pointerType === 'mouse' && event.button === 0
@@ -1048,7 +1050,7 @@ export function MapEditorPage() {
           }}
           onClickCapture={(event) => {
             if ((event.target as HTMLElement).closest('[contenteditable], input, textarea, .me-epd')) return
-            if ((event.target as HTMLElement).closest('[data-wiki-name]')) { window.clearTimeout(paperOpenTimerRef.current); return }
+            if ((event.target as HTMLElement).closest('[data-wiki-name]')) return
             const badge = (event.target as HTMLElement).closest<HTMLElement>('[data-source-node-id]')
             if (badge?.dataset.sourceNodeId) {
               event.preventDefault(); event.stopPropagation(); setSelectedNode(badge.dataset.sourceNodeId)
@@ -1056,16 +1058,6 @@ export function MapEditorPage() {
               const annotation = paperAnnotations.find((item) => item.id === relation?.annotationId)
               if (annotation) openPaper(annotation.paperId, annotation.id, badge.dataset.sourceNodeId)
               return
-            }
-            const paperAnchor = adapterRef.current?.resolveNode(event.target)
-            if (paperAnchor && !event.shiftKey && !event.ctrlKey && !event.metaKey && event.detail < 2) {
-              const paperRelation = nodePaperRelations.find((item) => item.documentId === document.id && item.nodeId === paperAnchor.id && papers.some((paper) => paper.id === item.paperId))
-              if (paperRelation) {
-                const source = annotationNodeRelations.find((item) => item.documentId === document.id && item.nodeId === paperAnchor.id)
-                setSelectedNode(paperAnchor.id)
-                window.clearTimeout(paperOpenTimerRef.current)
-                paperOpenTimerRef.current = window.setTimeout(() => openPaper(paperRelation.paperId, source?.annotationId, paperAnchor.id), 400)
-              }
             }
             if (event.shiftKey || useSelectionStore.getState().selectedNodeIds.length <= 1) return
             const anchor = adapterRef.current?.resolveNode(event.target)
@@ -1076,8 +1068,8 @@ export function MapEditorPage() {
             adapterRef.current?.setSelections([anchor.id])
           }}
           onDoubleClickCapture={(event) => {
-            window.clearTimeout(paperOpenTimerRef.current)
             const target = event.target as HTMLElement
+            if (target.closest('.node-quick-actions, .canvas-controls, .me-epd, [data-source-node-id]')) return
             const editor = target.closest<HTMLElement>('#input-box[contenteditable]')
             const name = editor ? wikiLinkAtPoint(editor, event.clientX, event.clientY) : target.closest<HTMLElement>('[data-wiki-name]')?.dataset.wikiName
             if (name) {
@@ -1087,9 +1079,19 @@ export function MapEditorPage() {
               return
             }
             if (editor) return
-            if (readOnly || presentationMode) return
             const anchor = adapterRef.current?.resolveNode(event.target)
             if (!anchor) return
+            const paperRelation = !event.shiftKey && !event.ctrlKey && !event.metaKey
+              ? nodePaperRelations.find((item) => item.documentId === document.id && item.nodeId === anchor.id && papers.some((paper) => paper.id === item.paperId))
+              : undefined
+            if (paperRelation) {
+              event.preventDefault(); event.stopPropagation()
+              const source = annotationNodeRelations.find((item) => item.documentId === document.id && item.nodeId === anchor.id)
+              setSelectedNode(anchor.id)
+              openPaper(paperRelation.paperId, source?.annotationId, anchor.id)
+              return
+            }
+            if (readOnly || presentationMode) return
             event.preventDefault()
             event.stopPropagation()
             setSelectedNode(anchor.id)
@@ -1117,13 +1119,11 @@ export function MapEditorPage() {
               const moved = Math.abs(event.clientX - boxGesture.x) > 4 || Math.abs(event.clientY - boxGesture.y) > 4
               if (moved) boxSelectionGestureRef.current = { ...boxGesture, moved: true }
             }
-            const anchor = adapterRef.current?.resolveNode(event.target)
-            setNodeAnchor(anchor ?? (selectedNodeId ? adapterRef.current?.anchorFor(selectedNodeId) : undefined))
           }}
           onClick={(event) => {
             // Floating controls are not blank canvas: their own actions must
             // keep the selection (and a newly inserted child) intact.
-            if ((event.target as HTMLElement).closest('.node-quick-actions, .canvas-controls')) return
+            if ((event.target as HTMLElement).closest('.node-quick-actions, .canvas-controls, .me-epd')) return
             // Keep focus and the browser's text selection inside the inline editor.
             // Focusing the stage here would discard a drag-selected text range before
             // the user can delete it with Backspace.
@@ -1169,7 +1169,7 @@ export function MapEditorPage() {
             <FileUp size={18} />
             <span>松开以插入“{findNode(document.root, fileDropTargetId)?.title ?? document.root.title}”：图片显示在主题中，PDF 生成子主题</span>
           </div>}
-          {nodeAnchor && !readOnly && !presentationMode && <div className="node-quick-actions" style={{ left: nodeAnchor.left + nodeAnchor.width + 7, top: nodeAnchor.top + nodeAnchor.height / 2 }}>
+          {nodeAnchor && nodeAnchor.id === selectedNodeId && !readOnly && !presentationMode && <div className="node-quick-actions" style={{ left: nodeAnchor.left + nodeAnchor.width + 7, top: nodeAnchor.top + nodeAnchor.height / 2 }}>
             {nodeAnchor.hasChildren && <button className="node-mini-button collapse-button" aria-label={nodeAnchor.collapsed ? '展开下级' : '折叠下级'} onClick={() => {
               adapterRef.current?.toggleExpanded(nodeAnchor.id)
               setNodeAnchor({ ...nodeAnchor, collapsed: !nodeAnchor.collapsed })
