@@ -83,7 +83,7 @@ if (worker.length !== 1 || !fs.readFileSync(path.join(pagesRoot, 'sw.js'), 'utf8
 const hash = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex').toUpperCase()
 const size = fs.statSync(installer).size
 const downloadUrl = `https://github.com/${repository}/releases/download/${tag}/${installerName}`
-const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- PDF 文献节点单击选中，双击打开左 PDF / 右导图分栏。\n- 选中节点后显示加减按钮；悬停不显示未选中节点的按钮。\n- 修复首次离线 PDF 导入所需工作线程的预缓存。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名，若系统阻止安装请停止并反馈，不关闭安全保护。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
+const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- 修复选中节点出现两个折叠减号的问题，仅显示一组浮动加减按钮。\n- PDF 文献节点单击选中，双击打开左 PDF / 右导图分栏。\n- 选中节点后显示加减按钮；悬停不显示未选中节点的按钮。\n- 修复首次离线 PDF 导入所需工作线程的预缓存。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名，若系统阻止安装请停止并反馈，不关闭安全保护。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
 fs.writeFileSync(notesPath, notes)
 fs.writeFileSync(manifestPath, JSON.stringify({ version, sourcePrivate: true, repository, siteUrl, installerName, size, sha256: hash, pagesFiles: files }, null, 2))
 console.log(JSON.stringify({ ready: true, version, installerName, size, sha256: hash, pagesFiles: files.length, siteUrl }))
