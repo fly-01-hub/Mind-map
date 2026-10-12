@@ -5,7 +5,7 @@
 - 私有源码：`fly-01-hub/Mind-map`，保持 Private。
 - 公开下载与教程：https://github.com/fly-01-hub/Mind-map-download
 - 在线使用：https://fly-01-hub.github.io/Mind-map-download/
-- 公开 main 分支只放使用说明，gh-pages 分支只放审查后的网页构建资源，Release 只上传指定版本的 EXE。
+- 公开 main 分支放使用说明和经检查的虚构示例演示素材，gh-pages 分支只放审查后的网页构建资源，Release 只上传指定版本的 EXE。
 
 网页在 Pages 子目录下使用 hash 路由。默认本机/PWA、Windows、安卓仍使用原有路由、来源与资料空间。网页版采用独立的浏览器资料空间；各用户资料不上传 GitHub，不自动同步。用完整 `.researchmind` 备份迁移，恢复会整体替换目标库。
 
@@ -37,8 +37,18 @@ node scripts/publish-public.mjs --status
 
 ## 分发边界
 
+公开仓库首页展示实际应用的导图与 PDF 分栏截图、约 30 秒 GIF 和 MP4；About 网址指向免费网页版，Topics 使用功能相关标签。演示中的 PDF 和导图专门编写，录制使用 Playwright 临时配置，不能截取用户日常知识库。
+
+`scripts/promote-public.mjs --inspect` 可读取当前仓库访问、来源和各版本下载数，快照仅保存在 Git 忽略的 `release/promotion/traffic-*.json` 中。仓库访问是 GitHub 返回的最近 14 天数据，可能包含开发/验证访问；Release 下载数是累计数，两者都不等于活跃用户数。未增加第三方埋点、付费服务或定时任务。
+
+宣传素材可用 `scripts/make-demo-pdf.py`、`scripts/capture-promotion.mjs`、`scripts/convert-promotion.py` 重新制作；需要已构建的本机 4173 网页、Chrome，以及 Python 的 reportlab、PyMuPDF、Pillow 和 imageio-ffmpeg。使用 Windows 微软雅黑字体；只在本机渲染示例，不分发字体文件。PDF 新建前按 PDF 技能执行操作标记，生成后检查预览 PNG。
+
+`scripts/prepare-promotion.mjs` 在保留现有完整使用指南的基础上准备首屏介绍及可复用分享文案。人工检查截图、GIF/视频、文案与链接后，`scripts/promote-public.mjs --publish` 仅上传明确列出的说明、PNG/GIF/MP4 和分享文案；通过公开仓库自身的 Git tree 提交，不推送私有源码历史。后续正常安装包发行会保留首页介绍和演示。视频中的步骤字幕及文件拖动提示为说明层，功能过程使用实际应用录制。
+
+本轮用户选择只发布到 GitHub；不代发到其他平台或社群。分享文案已放入公开仓库 `promotion/share-copy.txt`，便于以后按需复用。
+
 仅分发安装包和网页构建文件，并不等于加密程序。浏览器需要获取 JavaScript，Electron 安装包也包含可提取的运行资源。原始 TypeScript 工程、开发注释与私有 Git 历史保持私有，不承诺防逆向。
 
-个人导图、论文、备份、数据库、截图、TLS 密钥、本机配置和凭据不能加入公开仓库。安装包未提供可信商业代码签名；遇系统阻止时停止，不关闭安全保护。
+个人导图、论文、备份、数据库、真实资料截图、TLS 密钥、本机配置和凭据不能加入公开仓库。安装包未提供可信商业代码签名；遇系统阻止时停止，不关闭安全保护。
 
 GitHub 的免费服务受额度和政策限制。当前模式没有自建服务器维护和云资料存储费用；应用修复与版本发布仍需要维护时间。

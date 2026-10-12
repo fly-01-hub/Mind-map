@@ -5,6 +5,21 @@ ResearchMind 枝间：完整项目接手说明（给新对话中的 AI）
 本文是私有源码仓库的维护交接，不是公开下载仓库的用户说明。保留 redme.txt 的现有拼写。
 
 ============================================================
+最新补充：2026-10-12 GitHub 展示与发现优化（优先于下文历史快照）
+============================================================
+
+用户要求执行免费曝光建议，随后明确选择“先只发布到 github 仓库”。已完成：
+  - 公开仓库 About 改为中英功能简介，homepage 改为免费 Pages 网页；添加 mind-map、pdf-reader、note-taking、knowledge-management、local-first、research、pwa、windows 共 8 个 Topics。
+  - 公开 README.md 和 redme.txt 首屏提供介绍、在线体验、Windows 下载和反馈入口；加入真实应用截图、30 秒 GIF/MP4、使用场景与分享文案，同时保留原完整教程、版本 1.7.7、校验值与备份说明。
+  - 公开 main 本轮提交 c3c08e4f68816c8f99314d47678f7a95b9ed9005；新增 assets/mindmap.png、assets/pdf-reading.png、assets/demo.gif、assets/demo.mp4、promotion/share-copy.txt。没有公开维护脚本、私有源码或私有 Git 历史。
+  - 演示以专门编写的中文虚构 PDF 和示例导图，在 Playwright 独立临时配置中录制，展示拖入 PDF、双击分栏、选句高亮并生成来源关联子节点。字幕与文件拖动提示为说明层，没有使用日常知识库或真实论文。未上传示例 PDF、备份或数据库。
+  - GIF 为 960×600、240 帧、30.0 秒，1799608 字节；MP4 为 1280×800，502155 字节。截图和视频帧已检查；7 个公开文件均通过匿名下载和逐字节比对。
+  - 发布前核对的 API 基线：仓库访问 1 次、独立访客 1 位、Star 0、来源列表为空；v1.7.5、v1.7.6、v1.7.7 安装包累计下载各 1 次。数据可能延迟并包含维护/验证访问，不能视为真实用户增长或活跃使用人数。
+  - 初始统计与验证快照只保存在 release/promotion/traffic-*.json 和 verification.json，受 Git 忽略。源码仓库实际可见性再次核对为 Private。
+  - 工具：scripts/promote-public.mjs 读取统计或按明确名单发布展示资源；scripts/make-demo-pdf.py、capture-promotion.mjs、convert-promotion.py、prepare-promotion.mjs 用于复现素材。语法检查、lint 和公开包审查通过，演示期间没有页面异常。详见 docs/DISTRIBUTION.md。
+  - 未在 B 站、知乎或社群代发，未购买广告/服务器/域名，未增加账号、收费服务、第三方统计或定时任务。应用代码、Pages 构建和已发布安装包未因本次展示优化而改变。
+
+============================================================
 最新补充：2026-10-12 节点按钮去重，版本 1.7.7（优先于下文历史快照）
 ============================================================
 
