@@ -188,7 +188,7 @@ test('packaged PDF worker loads offline, renders, and restores the reading page'
   await page.getByRole('button', { name: '节点详情', exact: true }).tap()
   await page.locator('input[accept="application/pdf,.pdf"]').setInputFiles({ name: '安卓离线 PDF.pdf', mimeType: 'application/pdf', buffer: createTestPdf() })
   await page.getByText('安卓离线 PDF', { exact: true }).tap()
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15000 })
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15000 })
   await expect(page.locator('.textLayer span', { hasText: 'ResearchMind first page' })).toBeVisible()
   await page.getByRole('button', { name: '下一页', exact: true }).tap()
   await expect(page.getByLabel('当前页码')).toHaveValue('2')

@@ -11,7 +11,7 @@ async function dropPdf(page: Page, title = 'Literature', target = '子项甲三'
     transfer.items.add(new File([new Uint8Array(value.bytes)], `${value.title}.pdf`, { type: 'application/pdf' }))
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
   }, { bytes: Array.from(bytes), title })
-  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.embedded-reader .pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
 }
 
 async function selectText(page: Page, text = 'ResearchMind first page') {
@@ -42,7 +42,7 @@ test('dropping literature opens PDF left, map right; only double click reopens t
   await page.screenshot({ path: 'test-results/literature-split.png', fullPage: true })
   await page.reload()
   await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick()
-  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.embedded-reader .pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false')
   expect(errors).toEqual([])
 })
 
@@ -67,13 +67,13 @@ test('highlight, underline and note automatically create sibling evidence under 
   await expect(page.locator('.me-tpc', { hasText: 'ResearchMind first page' })).toHaveCount(3)
   await expect(page.locator('.me-tpc.selected')).toHaveCount(1)
   await expect(literature).toBeVisible()
-  const durableChildren = await page.evaluate(async () => {
+  const durableChildren = () => page.evaluate(async () => {
     const { appDatabase } = await import('/src/db/appDatabase.ts' as string)
     const saved = await appDatabase.documents.get('test-map')
     const find = (node: { title: string; children: typeof node[] }): typeof node | undefined => node.title === 'Literature' ? node : node.children.map(find).find(Boolean)
     return find(saved.root)?.children.map((node) => node.title)
   })
-  expect(durableChildren).toEqual(['ResearchMind first page', 'ResearchMind first page', 'ResearchMind first page'])
+  await expect.poll(durableChildren).toEqual(['ResearchMind first page', 'ResearchMind first page', 'ResearchMind first page'])
   await page.screenshot({ path: 'test-results/literature-underline.png', fullPage: true })
   await page.reload()
   await expect(page.locator('.me-tpc', { hasText: 'ResearchMind first page' })).toHaveCount(3)
@@ -91,7 +91,7 @@ test('continuous highlighting creates evidence without an extra dialog and suppo
   await page.locator('.canvas-controls').getByRole('button', { name: '重做', exact: true }).click()
   await expect(page.locator('.me-tpc', { hasText: 'ResearchMind first page' })).toHaveCount(1)
   await page.locator('.embedded-reader').getByRole('button', { name: '下一页', exact: true }).click()
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false')
   await selectText(page, 'Second-page target phrase')
   await expect(page.locator('.me-tpc', { hasText: 'Second-page target phrase' })).toHaveCount(1)
 })
@@ -129,7 +129,7 @@ test('a corrupt dropped PDF leaves no empty paper node', async ({ page }) => {
 test('multi-line partial underlines create only text-sized lines, not whole span boxes', async ({ page }) => {
   const bytes = createTestPdf('BT /F1 18 Tf 72 720 Td (First selected line here) Tj 0 -30 Td (Second selected line here) Tj ET')
   await dropPdf(page, 'Multiline', '子项甲三', bytes)
-  const layer = page.locator('.embedded-reader .textLayer')
+  const layer = page.locator('.embedded-reader .pdf-page[data-current-page="true"] .textLayer')
   await layer.evaluate((node) => {
     const spans = node.querySelectorAll('span')
     const range = document.createRange()
@@ -174,7 +174,7 @@ test('rectangle highlight fills the entire region, extracts its text and survive
   await expect(mark).toHaveCount(1)
   await expect(page.locator('.me-tpc', { hasText: 'ResearchMind first page' })).toHaveCount(1)
   await reader.getByRole('button', { name: '放大', exact: true }).click()
-  await expect(reader.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  await expect(reader.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false')
   await expect(mark).toHaveCount(1)
   await page.screenshot({ path: 'test-results/rectangle-highlight.png', fullPage: true })
   await page.reload()
@@ -217,7 +217,7 @@ test('legacy oversize fragmented boxes are reanchored to exact text without rewr
   })
   await page.reload()
   await page.locator('.me-tpc', { hasText: 'Literature' }).first().dblclick()
-  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.embedded-reader .pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false')
   const mark = page.locator('.paper-annotation-mark.highlight')
   await expect(mark).toHaveCount(1)
   const textBounds = (await page.locator('.embedded-reader .textLayer span', { hasText: 'ResearchMind first page' }).boundingBox())!
@@ -225,7 +225,7 @@ test('legacy oversize fragmented boxes are reanchored to exact text without rewr
   expect(Math.abs(bounds.width - textBounds.width)).toBeLessThan(2)
   expect(await mark.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none')
   await page.locator('.embedded-reader').getByRole('button', { name: '放大', exact: true }).click()
-  await expect(page.locator('.embedded-reader .pdf-page-shell')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.embedded-reader .pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false')
   await expect(mark).toHaveCount(1)
   expect(await page.evaluate(async (id) => {
     const { appDatabase } = await import('/src/db/appDatabase.ts' as string)

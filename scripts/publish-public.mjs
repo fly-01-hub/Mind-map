@@ -83,7 +83,7 @@ if (worker.length !== 1 || !fs.readFileSync(path.join(pagesRoot, 'sw.js'), 'utf8
 const hash = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex').toUpperCase()
 const size = fs.statSync(installer).size
 const downloadUrl = `https://github.com/${repository}/releases/download/${tag}/${installerName}`
-const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- 修复选中节点出现两个折叠减号的问题，仅显示一组浮动加减按钮。\n- PDF 文献节点单击选中，双击打开左 PDF / 右导图分栏。\n- 选中节点后显示加减按钮；悬停不显示未选中节点的按钮。\n- 修复首次离线 PDF 导入所需工作线程的预缓存。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名，若系统阻止安装请停止并反馈，不关闭安全保护。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
+const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- PDF 改为上下连续滚动阅读，独立阅读与导图分栏均支持；页码随滚动更新，并恢复页内阅读位置。\n- 长 PDF 仅渲染视口附近页面，保留搜索、页码跳转、缩放及文字/区域批注。\n- 修复批注重复定位导致页面被拉回的问题，连续标注时保持阅读位置。\n- PDF 文献节点单击选中，双击打开左 PDF / 右导图分栏。\n- 选中节点后只显示一组加减按钮，悬停不显示。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名，若系统阻止安装请停止并反馈，不关闭安全保护。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
 fs.writeFileSync(notesPath, notes)
 fs.writeFileSync(manifestPath, JSON.stringify({ version, sourcePrivate: true, repository, siteUrl, installerName, size, sha256: hash, pagesFiles: files }, null, 2))
 console.log(JSON.stringify({ ready: true, version, installerName, size, sha256: hash, pagesFiles: files.length, siteUrl }))
@@ -163,6 +163,7 @@ readme = readme
   .replace(/\b[A-F0-9]{64}\b/g, hash)
 readme = readme.replace('仅提供使用说明及 Windows EXE 安装包', '提供使用说明、Windows EXE 安装包和网页版构建资源（gh-pages 分支）')
 readme = readme.replace('在思维导图中双击节点编辑文字，选中节点后按', '在思维导图中双击普通节点编辑文字；PDF 文献节点单击选中、双击打开分栏。选中节点后显示加减按钮，按')
+if (!readme.includes('连续滚动阅读')) readme = readme.replace('## 保存、完整备份与恢复', 'PDF 支持上下连续滚动阅读，独立阅读与导图分栏均可使用。顶部页码跟随滚动，仍可输入页码或用上一页/下一页跳转；关闭后恢复页码和页内位置。长文献只渲染视口附近的页面。\n\n## 保存、完整备份与恢复')
 readme = readme.replace('公开仓库的文件和提交历史只有说明文档', '公开仓库的 main 分支提供说明文档，gh-pages 分支提供网页构建资源；均不包含原始开发工程或私有源码历史')
 readme = readme.replace('后续公开更新仍仅上传经核验的安装包和说明', '后续公开更新仅上传经核验的安装包、说明及网页构建资源')
 if (!readme.includes(siteUrl)) readme = readme.replace('## 下载安装', `## 在线使用（免费）\n\n[打开网页版](${siteUrl})。无需安装或启动本机服务器，支持浏览器中的 PWA 安装；首次在线加载后可离线使用已缓存功能。资料保存在各自浏览器，浏览器清理数据可能导致资料丢失，请定期导出完整备份。网页版与桌面版本的资料不会自动同步。\n\n## 下载安装`)

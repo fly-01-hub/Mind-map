@@ -18,8 +18,8 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   await page.getByText('ResearchMind Reader Test', { exact: true }).click()
 
   await expect(page).toHaveURL(/\/paper\/[0-9a-f-]+/)
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
-  await expect(page.locator('.pdf-page')).toBeVisible()
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.pdf-page[data-current-page="true"]')).toBeVisible()
   await expect(page.getByText('/ 2', { exact: true })).toBeVisible()
 
   const selectFirstPageText = async () => {
@@ -39,7 +39,7 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   await expect(page.locator('.paper-annotation-mark.highlight')).toHaveCount(1)
   await expect(page.locator('.paper-annotation-list article')).toHaveCount(1)
   await page.reload()
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
   await expect(page.locator('.paper-annotation-mark.highlight')).toHaveCount(1)
 
   await selectFirstPageText()
@@ -74,8 +74,8 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
   await expect(page.getByText('130%', { exact: true })).toBeVisible()
   await page.waitForTimeout(400)
   await page.reload()
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
-  await expect(page.locator('.pdf-page')).toBeVisible()
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.pdf-page[data-current-page="true"]')).toBeVisible()
   await expect(page.getByLabel('当前页码')).toHaveValue('2')
   await expect(page.getByText('130%', { exact: true })).toBeVisible()
 
@@ -94,7 +94,7 @@ test('opens a PDF, searches, changes page and restores reading progress', async 
 
   await page.getByRole('button', { name: '打开来源 ResearchMind Reader Test 第 1 页' }).click()
   await expect(page).toHaveURL(/\/paper\/[0-9a-f-]+\?.*page=1.*annotationId=/)
-  await expect(page.locator('.pdf-page-shell')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
+  await expect(page.locator('.pdf-page-shell[data-current-page="true"]')).toHaveAttribute('aria-busy', 'false', { timeout: 15_000 })
   await expect(page.getByLabel('当前页码')).toHaveValue('1')
   await expect(page.locator('.paper-annotation-mark.target')).toHaveCount(1)
   expect(errors).toEqual([])

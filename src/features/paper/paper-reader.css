@@ -26,7 +26,10 @@
 .paper-sidebar-hidden .paper-reader-content { grid-template-columns: minmax(0, 1fr); }
 .paper-sidebar-hidden .paper-sidebar { display: none; }
 .paper-sidebar-hidden .paper-node-created { right: 22px; }
-.pdf-workspace { min-width: 0; min-height: 0; padding: 32px 24px 70px; background: #e8ebe8; overflow: auto; }
+.pdf-workspace { min-width: 0; min-height: 0; padding: 32px 24px 70px; background: #e8ebe8; overflow: auto; overflow-anchor: none; }
+.pdf-continuous-pages { display: flex; flex-direction: column; gap: 24px; min-width: min-content; }
+.pdf-page-slot { flex: none; position: relative; }
+.pdf-page-placeholder { height: 100%; background: white; display: grid; place-items: center; color: #8b958e; font-size: 12px; }
 .pdf-page-shell { min-width: min-content; min-height: 100%; display: flex; justify-content: center; position: relative; }
 .pdf-page { position: relative; flex: none; background: white; box-shadow: 0 8px 34px rgba(30, 42, 33, .16), 0 0 0 1px rgba(43, 57, 47, .07); }
 .pdf-page canvas { position: absolute; inset: 0; display: block; }

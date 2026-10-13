@@ -15,7 +15,7 @@ import type { AnnotationColor, PaperAnnotation, PaperAnnotationType, PdfTextSele
 import { AnnotationToolbar } from './AnnotationToolbar'
 import { CreateNodeFromAnnotationDialog } from './CreateNodeFromAnnotationDialog'
 import { paperKnowledgeService } from '../../services/paper/paperKnowledgeService'
-import { PdfViewer } from './PdfViewer'
+import { ContinuousPdfViewer, type PdfReadingPosition } from './ContinuousPdfViewer'
 import { PaperSidebar } from './PaperSidebar'
 import { LinkAnnotationDialog } from './LinkAnnotationDialog'
 import { KnowledgeFeedback } from './knowledgeFeedback'
@@ -56,6 +56,11 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
   const [linkingAnnotationIds, setLinkingAnnotationIds] = useState<string[]>()
   const [document, setDocument] = useState<PDFDocumentProxy>()
   const [pageNumber, setPageNumber] = useState(1)
+  const [navigation, setNavigation] = useState<PdfReadingPosition>({ pageNumber: 1, offset: 0 })
+  const readingPositionRef = useRef<PdfReadingPosition>({ pageNumber: 1, offset: 0 })
+  const readingSaveTimerRef = useRef<number | undefined>(undefined)
+  const readingScaleRef = useRef(1.2)
+  const hasLoadedReadingStateRef = useRef(false)
   const [scale, setScale] = useState(1.2)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -82,7 +87,6 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
   const deleteAnnotation = usePaperStore((state) => state.deleteAnnotation)
   const annotations = useMemo(() => allAnnotations.filter((annotation) => annotation.paperId === paperId)
     .sort((a, b) => a.pageNumber - b.pageNumber || a.createdAt.localeCompare(b.createdAt)), [allAnnotations, paperId])
-  const pageAnnotations = useMemo(() => annotations.filter((annotation) => annotation.pageNumber === pageNumber), [annotations, pageNumber])
   const totalMatches = useMemo(() => searchResults.reduce((sum, result) => sum + result.occurrences, 0), [searchResults])
 
   const goToPage = useCallback((value: number) => {
@@ -91,7 +95,10 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
     setAreaMode(false)
     setEditingAreaId(undefined)
     window.getSelection()?.removeAllRanges()
-    setPageNumber(Math.min(document?.numPages ?? 1, Math.max(1, value)))
+    const position = { pageNumber: Math.min(document?.numPages ?? 1, Math.max(1, value)), offset: 0 }
+    readingPositionRef.current = position
+    setPageNumber(position.pageNumber)
+    setNavigation(position)
   }, [document?.numPages])
 
   const changeScale = useCallback((delta: number) => {
@@ -142,7 +149,14 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
         const restoredPage = Number.isInteger(requestedPage) && requestedPage > 0
           ? requestedPage
           : requestedAnnotationPage ?? readingState?.pageNumber ?? 1
-        setPageNumber(Math.min(loadedDocument.numPages, Math.max(1, restoredPage)))
+        const position = {
+          pageNumber: Math.min(loadedDocument.numPages, Math.max(1, restoredPage)),
+          offset: requestedPage > 0 || requestedAnnotationPage ? 0 : Math.max(0, Math.min(1, readingState?.scrollOffset ?? 0)),
+        }
+        readingPositionRef.current = position
+        hasLoadedReadingStateRef.current = true
+        setPageNumber(position.pageNumber)
+        setNavigation(position)
         setScale(clampScale(readingState?.scale ?? 1.2))
         if (currentPaper.pageCount !== loadedDocument.numPages) {
           await paperRepository.updatePageCount(currentPaper.id, loadedDocument.numPages)
@@ -171,7 +185,10 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
     const annotation = requestedAnnotationId ? usePaperStore.getState().annotations.find((item) => item.id === requestedAnnotationId && item.paperId === paperId) : undefined
     const requestedPage = annotation?.pageNumber ?? Number(requestedPageParam)
     if (requestedPage > 0) {
-      setPageNumber(Math.min(document.numPages, Math.max(1, requestedPage)))
+      const position = { pageNumber: Math.min(document.numPages, Math.max(1, requestedPage)), offset: 0 }
+      readingPositionRef.current = position
+      setPageNumber(position.pageNumber)
+      setNavigation(position)
       setActiveAnnotationId(annotation?.id)
       setTextSelection(undefined)
     }
@@ -181,10 +198,25 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
     if (!paper || !document) return
     // Persist discrete page/zoom changes immediately: leaving the reader or
     // opening Android's file picker must not cancel the latest reading state.
-    void paperRepository.saveReadingState(paper.id, pageNumber, scale).catch(() => {
+    readingScaleRef.current = scale
+    void paperRepository.saveReadingState(paper.id, pageNumber, scale, readingPositionRef.current.offset).catch(() => {
       useKnowledgeFeedbackStore.setState({ message: '阅读进度保存失败，请重试并检查设备剩余空间。', error: true })
     })
   }, [document, pageNumber, paper, scale])
+
+  const rememberPosition = useCallback((position: PdfReadingPosition) => {
+    readingPositionRef.current = position
+    setPageNumber(position.pageNumber)
+    if (readingSaveTimerRef.current) window.clearTimeout(readingSaveTimerRef.current)
+    readingSaveTimerRef.current = window.setTimeout(() => {
+      if (paperId) void paperRepository.saveReadingState(paperId, position.pageNumber, readingScaleRef.current, position.offset).catch(() => {})
+    }, 250)
+  }, [paperId])
+  useEffect(() => () => {
+    if (readingSaveTimerRef.current) window.clearTimeout(readingSaveTimerRef.current)
+    const position = readingPositionRef.current
+    if (paperId && hasLoadedReadingStateRef.current) void paperRepository.saveReadingState(paperId, position.pageNumber, readingScaleRef.current, position.offset).catch(() => {})
+  }, [paperId])
 
   useEffect(() => {
     if (searchOpen) window.setTimeout(() => searchInputRef.current?.focus(), 0)
@@ -243,8 +275,13 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
       }
       if (event.key === 'Escape') { setSearchOpen(false); setAreaMode(false); setEditingAreaId(undefined); setTextSelection(undefined); window.getSelection()?.removeAllRanges(); return }
       if (editing) return
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') goToPage(pageNumber + 1)
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') goToPage(pageNumber - 1)
+      if (event.key === 'ArrowRight') goToPage(pageNumber + 1)
+      if (event.key === 'ArrowLeft') goToPage(pageNumber - 1)
+      if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) {
+        event.preventDefault()
+        const direction = event.key === 'ArrowDown' || event.key === 'PageDown' ? 1 : -1
+        workspaceRef.current?.scrollBy({ top: direction * (event.key.startsWith('Page') ? workspaceRef.current.clientHeight * .85 : 60) })
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -361,9 +398,9 @@ export function PaperReaderPage(props: PaperReaderProps = {}) {
       </div>}
       {searchError && searchOpen && <div className="paper-search-error" role="alert">{searchError}</div>}
       <div className="paper-reader-content">
-        <section ref={workspaceRef} className="pdf-workspace" onScroll={() => setTextSelection(undefined)}>
+        <section ref={workspaceRef} className="pdf-workspace" tabIndex={0} aria-label="PDF 阅读区" onScroll={() => setTextSelection(undefined)}>
           {areaMode && <div className="area-mode-hint">{editingAreaId ? '重新框选，原有笔记与节点关联保持不变' : areaStyle === 'highlight' ? '拖出矩形 → 选择颜色 → 保存区域高亮（扫描件也可用）' : '拖动框选图表或公式'} · Esc 退出</div>}
-          <PdfViewer document={document} pageNumber={pageNumber} scale={scale} searchQuery={activeSearch} annotations={pageAnnotations} activeAnnotationId={activeAnnotationId} onTextSelection={(selection) => {
+          <ContinuousPdfViewer document={document} workspaceRef={workspaceRef} navigation={navigation} pageNumber={pageNumber} scale={scale} searchQuery={activeSearch} annotations={annotations} activeAnnotationId={activeAnnotationId} onPositionChange={rememberPosition} onTextSelection={(selection) => {
             setTextSelection(selection)
             if (selection && !props.readOnly && selection.kind !== 'area' && selectionMode !== 'manual') {
               void knowledgeAction(() => saveSelection(selectionMode, '', 'yellow', selection), props.autoCreateChildren && contextNode ? '已标注并生成文献子节点' : '已标注')

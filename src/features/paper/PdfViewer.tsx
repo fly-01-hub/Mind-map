@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
 import type { AnnotationRect, PaperAnnotation, PdfTextSelection } from '../../types/annotation'
 import { anchoredAnnotationRects, createTextAnchorIndex, normalizeSelectionRects, selectionAnchor, textInArea, textSelectionRects } from '../../services/pdf/annotationService'
@@ -15,9 +15,13 @@ interface PdfViewerProps {
   areaMode?: boolean
   areaStyle?: 'highlight' | 'outline'
   onAnnotationActivate?: (annotation: PaperAnnotation) => void
+  isCurrentPage?: boolean
+  onPageSize?: (size: { width: number; height: number }) => void
+  onLocateAnnotation?: (mark: HTMLElement, id: string) => void
 }
 
-export function PdfViewer({ document, pageNumber, scale, searchQuery, annotations, activeAnnotationId, onTextSelection, areaMode, areaStyle = 'outline', onAnnotationActivate }: PdfViewerProps) {
+export function PdfViewer({ document, pageNumber, scale, searchQuery, annotations, activeAnnotationId, onTextSelection, areaMode, areaStyle = 'outline', onAnnotationActivate, isCurrentPage = true, onPageSize, onLocateAnnotation }: PdfViewerProps) {
+  const reportSize = useEffectEvent((size: { width: number; height: number }) => onPageSize?.(size))
   const pageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textLayerRef = useRef<HTMLDivElement>(null)
@@ -59,6 +63,7 @@ export function PdfViewer({ document, pageNumber, scale, searchQuery, annotation
         if (disposed) return
         const viewport = page.getViewport({ scale })
         const baseViewport = page.getViewport({ scale: 1 })
+        reportSize({ width: baseViewport.width, height: baseViewport.height })
         pageMetricsRef.current = { width: baseViewport.width, height: baseViewport.height, rotation: viewport.rotation }
         const canvas = canvasRef.current
         const pageElement = pageRef.current
@@ -148,17 +153,17 @@ export function PdfViewer({ document, pageNumber, scale, searchQuery, annotation
   }
 
   return (
-    <div className="pdf-page-shell" aria-busy={rendering}>
+    <div className="pdf-page-shell" data-current-page={isCurrentPage} aria-busy={rendering}>
       {rendering && <div className="pdf-rendering"><span />正在渲染第 {pageNumber} 页…</div>}
       {error && <div className="paper-error-state">{error}</div>}
-      <div ref={pageRef} className="pdf-page" data-page-number={pageNumber} onPointerUp={captureSelection} onClick={(event) => {
+      <div ref={pageRef} className="pdf-page" data-current-page={isCurrentPage} data-page-number={pageNumber} onPointerUp={captureSelection} onClick={(event) => {
         if (areaMode || !window.getSelection()?.isCollapsed) return
         const point = normalizedPoint(event.clientX, event.clientY)
         const hit = [...displayAnnotations].reverse().find((annotation) => annotation.positionData.rects.some((rect) => point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height))
         if (hit) onAnnotationActivate?.(hit)
       }}>
         <canvas ref={canvasRef} aria-label={`论文第 ${pageNumber} 页`} />
-        <AnnotationLayer annotations={displayAnnotations} activeAnnotationId={activeAnnotationId} />
+        <AnnotationLayer annotations={displayAnnotations} activeAnnotationId={activeAnnotationId} onLocate={onLocateAnnotation} />
         <div ref={textLayerRef} className="textLayer pdf-text-layer" />
         {areaMode && !rendering && <div className="pdf-area-selector" aria-label="拖动框选图表区域" onPointerDown={(event) => {
           if (event.button !== 0) return
