@@ -93,10 +93,11 @@ if (includeAndroid) {
   const apkHash = crypto.createHash('sha256').update(bytes).digest('hex').toUpperCase()
   assets.push({ name, file, size: bytes.length, hash: apkHash })
   const apkUrl = `https://github.com/${repository}/releases/download/${tag}/${name}`
-  androidSection = `## 安卓安装包（${version}）\n\n[下载 ${name}](${apkUrl})\n\nAndroid 9 及以上，建议平板横屏使用。本版优化大型导图编辑、撤销记录与自动保存，保留 PDF 连续阅读。\n\n升级前创建完整 .researchmind 备份，然后覆盖安装；不要先卸载已有应用。沿用原包名与签名，资料不会自动跨设备同步。触屏模拟检查不替代真机验收。\n\nAPK 大小：${bytes.length.toLocaleString('en-US')} 字节。SHA-256：${apkHash}\n\n`
+  androidSection = `## 安卓安装包（${version}）\n\n[下载 ${name}](${apkUrl})\n\nAndroid 9 及以上，建议平板横屏使用。本版加强草稿恢复、保存失败重试和恢复前安全副本，保留大型导图优化与 PDF 连续阅读。\n\n升级前创建完整 .researchmind 备份，然后覆盖安装；不要先卸载已有应用。沿用原包名与签名，资料不会自动跨设备同步。触屏模拟检查不替代真机验收。\n\nAPK 大小：${bytes.length.toLocaleString('en-US')} 字节。SHA-256：${apkHash}\n\n`
 }
 const performanceNotes = '大型导图优化：常见新增、改字与折叠按变化更新，减少重复渲染；撤销记录共享未改变的分支；自动保存仅写入发生变化的文档。复杂结构编辑保留完整刷新。实际速度受设备、可见节点和图片数量影响。'
-const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- ${performanceNotes}\n- 保留 PDF 上下连续阅读、双击文献节点分栏、选中后显示一组节点加减按钮。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n${androidSection}资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
+const safetyNotes = '本地资料保护：节点、大纲和详情笔记保留未提交草稿恢复记录；关闭、切后台和网页更新前尝试提交保存；写入失败自动重试并提供导出。读取失败停止编辑，不将原库当成空白覆盖。多窗口协调写入并检测旧版本覆盖；恢复备份前自动保留最近两份本机安全副本。浏览器清理、卸载或设备损坏仍需独立的完整备份防护，不能保证零丢失。'
+const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- ${safetyNotes}\n- ${performanceNotes}\n- 保留 PDF 上下连续阅读、双击文献节点分栏、选中后显示一组节点加减按钮。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n${androidSection}资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
 fs.writeFileSync(notesPath, notes)
 fs.writeFileSync(manifestPath, JSON.stringify({ version, sourcePrivate: true, repository, siteUrl, installerName, size, sha256: hash, assets: assets.map(({ name, size, hash }) => ({ name, size, sha256: hash })), pagesFiles: files }, null, 2))
 console.log(JSON.stringify({ ready: true, version, installerName, size, sha256: hash, pagesFiles: files.length, siteUrl }))
@@ -105,7 +106,7 @@ if (mode === '--prepare') process.exit(0)
 const releases = (await api(`/repos/${repository}/releases?per_page=100`)).data
 let release = releases.find((item) => item.tag_name === tag)
 if (!release) {
-  release = (await api(`/repos/${repository}/releases`, 'POST', { tag_name: tag, target_commitish: target.default_branch, name: `ResearchMind 枝间 ${version} · 大型导图性能优化`, body: notes, draft: true, prerelease: false })).data
+  release = (await api(`/repos/${repository}/releases`, 'POST', { tag_name: tag, target_commitish: target.default_branch, name: `ResearchMind 枝间 ${version} · 本地资料保护`, body: notes, draft: true, prerelease: false })).data
 } else if (!release.draft) {
   throw new Error(`${tag} is already published; choose a new version instead of replacing a public installer`)
 }
@@ -183,6 +184,8 @@ if (androidSection) {
 }
 if (/## 大型导图性能\n/.test(readme)) readme = readme.replace(/## 大型导图性能\n[\s\S]*?(?=\n## |$)/, () => `## 大型导图性能\n\n${performanceNotes}\n`)
 else readme = readme.replace('## 保存、完整备份与恢复', `## 大型导图性能\n\n${performanceNotes}\n\n## 保存、完整备份与恢复`)
+if (/## 数据保护\n/.test(readme)) readme = readme.replace(/## 数据保护\n[\s\S]*?(?=\n## |$)/, () => `## 数据保护\n\n${safetyNotes}\n`)
+else readme = readme.replace('## 保存、完整备份与恢复', `## 数据保护\n\n${safetyNotes}\n\n## 保存、完整备份与恢复`)
 readme = readme.replace('在思维导图中双击节点编辑文字，选中节点后按', '在思维导图中双击普通节点编辑文字；PDF 文献节点单击选中、双击打开分栏。选中节点后显示加减按钮，按')
 if (!readme.includes('连续滚动阅读')) readme = readme.replace('## 保存、完整备份与恢复', 'PDF 支持上下连续滚动阅读，独立阅读与导图分栏均可使用。顶部页码跟随滚动，仍可输入页码或用上一页/下一页跳转；关闭后恢复页码和页内位置。长文献只渲染视口附近的页面。\n\n## 保存、完整备份与恢复')
 readme = readme.replace('公开仓库的文件和提交历史只有说明文档', '公开仓库的 main 分支提供说明文档，gh-pages 分支提供网页构建资源；均不包含原始开发工程或私有源码历史')

@@ -34,7 +34,7 @@ class KnowledgeDatabase extends Dexie {
   meta!: EntityTable<AppMeta, 'key'>
 
   constructor() {
-    super('zhijian-knowledge-db')
+    super('zhijian-knowledge-db', { chromeTransactionDurability: 'strict' })
     this.version(1).stores({
       documents: 'id, folderId, updatedAt, deletedAt, isFavorite',
       folders: 'id, parentId, order, deletedAt',

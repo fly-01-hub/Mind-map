@@ -3,9 +3,17 @@ import { isAndroidApp, saveAndroidFile } from '../platform/androidFiles'
 import type { AnnotationNodeRelation, PaperAnnotation } from '../../types/annotation'
 import type { DocumentVersion, FolderData, MindMapDocument } from '../../types/mindmap'
 import type { NodePaperRelation, Paper, PaperFileCache, PaperReadingState } from '../../types/paper'
+import Dexie, { type EntityTable } from 'dexie'
 
 const BACKUP_FORMAT = 'researchmind-local-backup'
 const BACKUP_VERSION = 1
+type LocalRows = Awaited<ReturnType<typeof readAllTables>>
+interface SafetySnapshot { id: string; createdAt: string; rows: LocalRows }
+class SafetyDatabase extends Dexie {
+  snapshots!: EntityTable<SafetySnapshot, 'id'>
+  constructor() { super('researchmind-safety-snapshots', { chromeTransactionDurability: 'strict' }); this.version(1).stores({ snapshots: 'id, createdAt' }) }
+}
+const safetyDatabase = new SafetyDatabase()
 
 interface SerializedBlob {
   mimeType: string
@@ -94,11 +102,21 @@ function parseBackup(text: string): LocalBackupPayload {
   // Reject malformed application records before entering the destructive restore
   // transaction. Optional new annotation fields keep v1 backups compatible.
   const tables = value.tables
+  for (const table of requiredTables) {
+    const key = table === 'meta' ? 'key' : table === 'paperFiles' || table === 'paperReadingStates' ? 'paperId' : 'id'
+    const ids = new Set<string>()
+    for (const record of tables[table] as unknown[]) {
+      if (!isRecord(record) || typeof record[key] !== 'string' || !record[key] || ids.has(record[key] as string)) throw new Error(`备份中的 ${table} 标识缺失或重复；现有资料未被修改。`)
+      ids.add(record[key] as string)
+    }
+  }
   const validNode = (root: unknown) => {
     const pending = [root]
+    const ids = new Set<string>()
     while (pending.length) {
       const node = pending.pop()
-      if (!isRecord(node) || typeof node.id !== 'string' || typeof node.title !== 'string' || !Array.isArray(node.children)) return false
+      if (!isRecord(node) || typeof node.id !== 'string' || !node.id || ids.has(node.id) || typeof node.title !== 'string' || !Array.isArray(node.children)) return false
+      ids.add(node.id)
       pending.push(...node.children)
     }
     return true
@@ -138,8 +156,13 @@ async function readAllTables() {
   })
 }
 
-export async function createLocalBackup(): Promise<BackupFile> {
+export async function createLocalBackup(current?: Pick<BackupTables, 'documents' | 'folders'>): Promise<BackupFile> {
   const rows = await readAllTables()
+  if (current) { rows.documents = structuredClone(current.documents); rows.folders = structuredClone(current.folders) }
+  return backupFromRows(rows)
+}
+
+async function backupFromRows(rows: LocalRows): Promise<BackupFile> {
   const [attachmentBlobs, paperFiles] = await Promise.all([
     Promise.all(rows.attachmentBlobs.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
     Promise.all(rows.paperFiles.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
@@ -170,6 +193,18 @@ export async function restoreLocalBackup(file: Blob) {
     ...row,
     blob: deserializeBlob(blob),
   }))
+  // Keep a complete independent local snapshot before any destructive write.
+  // If storage is full or this fails, abort without touching the current data.
+  const rows = await readAllTables()
+  if (Object.entries(rows).some(([table, values]) => table !== 'meta' && values.length > 0)) {
+    try {
+      await safetyDatabase.transaction('rw', safetyDatabase.snapshots, async () => {
+        const previous = await safetyDatabase.snapshots.orderBy('createdAt').toArray()
+        if (previous.length >= 2) await safetyDatabase.snapshots.bulkDelete(previous.slice(0, previous.length - 1).map((item) => item.id))
+        await safetyDatabase.snapshots.add({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), rows })
+      })
+    } catch { throw new Error('无法保存恢复前的安全副本，已停止恢复，原有资料未被替换。请检查设备空间并先导出完整备份。') }
+  }
   await appDatabase.transaction('rw', appDatabase.tables, async () => {
     await Promise.all(appDatabase.tables.map((table) => table.clear()))
     await Promise.all([
@@ -195,6 +230,13 @@ export async function restoreLocalBackup(file: Blob) {
   }
 }
 
+export async function latestSafetyBackup(): Promise<BackupFile | undefined> {
+  const snapshot = await safetyDatabase.snapshots.orderBy('createdAt').reverse().first()
+  if (!snapshot) return
+  const backup = await backupFromRows(snapshot.rows)
+  return { ...backup, fileName: `ResearchMind-before-restore-${snapshot.createdAt.replace(/[:.]/g, '-')}.researchmind` }
+}
+
 interface SaveFilePickerWindow extends Window {
   showSaveFilePicker?: (options: {
     suggestedName: string
@@ -203,7 +245,7 @@ interface SaveFilePickerWindow extends Window {
 }
 
 export async function saveBackupFile(backup: BackupFile) {
-  if (isAndroidApp()) return saveAndroidFile(backup.blob, backup.fileName)
+  if (isAndroidApp()) { await saveAndroidFile(backup.blob, backup.fileName); return 'saved' as const }
   const picker = (window as SaveFilePickerWindow).showSaveFilePicker
   if (picker) {
     const handle = await picker({
@@ -213,7 +255,7 @@ export async function saveBackupFile(backup: BackupFile) {
     const writable = await handle.createWritable()
     await writable.write(backup.blob)
     await writable.close()
-    return
+    return 'saved' as const
   }
   const url = URL.createObjectURL(backup.blob)
   const anchor = document.createElement('a')
@@ -221,4 +263,5 @@ export async function saveBackupFile(backup: BackupFile) {
   anchor.download = backup.fileName
   anchor.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return 'downloaded' as const
 }

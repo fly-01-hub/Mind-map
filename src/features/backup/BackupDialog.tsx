@@ -1,9 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Download, HardDrive, RotateCcw, ShieldCheck, Upload, X } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { createLocalBackup, restoreLocalBackup, saveBackupFile } from '../../services/backup/localBackupService'
-import { flushLocalPersistence } from '../../services/persistence/localPersistence'
+import { createLocalBackup, latestSafetyBackup, restoreLocalBackup, saveBackupFile } from '../../services/backup/localBackupService'
+import { prepareForNavigation, replaceLocalKnowledgeBase } from '../../services/persistence/localPersistence'
 import { isAndroidApp } from '../../services/platform/androidFiles'
+import { useDocumentStore } from '../../stores/documentStore'
+import { useDataSafetyStore } from '../../stores/dataSafetyStore'
 
 export function BackupDialog() {
   const storageLocation = isAndroidApp() ? '此设备应用' : window.location.protocol === 'app:' ? '此电脑应用' : '当前浏览器'
@@ -11,15 +13,17 @@ export function BackupDialog() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const persistent = useDataSafetyStore((state) => state.persistentStorage)
 
   const exportBackup = async () => {
     setBusy(true)
     setMessage('正在整理本地资料…')
     try {
-      await flushLocalPersistence()
-      const backup = await createLocalBackup()
-      await saveBackupFile(backup)
-      setMessage(`备份已保存，共包含 ${backup.itemCount} 条数据。建议另存到安全的本地文件夹或移动硬盘。`)
+      await prepareForNavigation().catch(() => undefined)
+      const state = useDocumentStore.getState()
+      const backup = await createLocalBackup({ documents: state.documents, folders: state.folders })
+      const result = await saveBackupFile(backup)
+      setMessage(result === 'saved' ? `备份已保存，共包含 ${backup.itemCount} 条数据。建议另存到安全的本地文件夹或移动硬盘。` : `完整备份已开始下载，共包含 ${backup.itemCount} 条数据。请确认文件已保存完成，再关闭或清理应用。`)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') setMessage('已取消保存。')
       else setMessage(error instanceof Error ? error.message : '备份失败，请稍后重试。')
@@ -37,7 +41,7 @@ export function BackupDialog() {
     setBusy(true)
     setMessage('正在验证并恢复备份…')
     try {
-      const result = await restoreLocalBackup(file)
+      const result = await replaceLocalKnowledgeBase(() => restoreLocalBackup(file))
       window.alert(`恢复完成：${result.documentCount} 份导图，${result.paperCount} 篇论文。页面将重新载入。`)
       window.location.reload()
     } catch (error) {
@@ -71,6 +75,16 @@ export function BackupDialog() {
             </button>
             <input ref={inputRef} className="visually-hidden" type="file" accept=".researchmind,application/json" onChange={(event) => void importBackup(event.target.files?.[0])} />
           </div>
+          <p className="backup-note">恢复前会自动保留最近两份本机安全副本；这仍不能替代设备之外的完整备份。</p>
+          {persistent !== undefined && <p className="backup-note">{persistent ? '浏览器已授予持久存储保护，可减少自动回收风险；手动清理站点数据仍会删除资料。' : '浏览器暂未授予持久存储保护，请另存完整备份。'}</p>}
+          <button className="secondary-button" disabled={busy} onClick={() => {
+            setBusy(true)
+            void latestSafetyBackup().then(async (backup) => {
+              if (!backup) { setMessage('暂无恢复前安全副本。'); return }
+              const result = await saveBackupFile(backup)
+              setMessage(result === 'saved' ? '恢复前安全副本已保存，可通过“从备份恢复”找回。' : '安全副本已开始下载，请确认文件已保存完成。')
+            }).catch(() => setMessage('安全副本导出失败，请检查设备空间。')).finally(() => setBusy(false))
+          }}>导出恢复前安全副本</button>
           <div className="backup-note"><ShieldCheck size={16} /><span>所有资料默认只保存在{storageLocation}中。定期把备份文件放入百度网盘，可防止设备损坏或本地数据被清除造成丢失。</span></div>
           {message && <p className="backup-message" role="status"><RotateCcw size={14} />{message}</p>}
         </Dialog.Content>

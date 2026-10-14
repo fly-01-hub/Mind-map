@@ -1,0 +1,7 @@
+.data-startup-protection { max-width: 660px; margin: 12vh auto; padding: 28px; line-height: 1.7; color: #31483a; }
+.data-startup-protection h1 { font-size: 23px; }
+.data-startup-protection button { margin: 12px 12px 0 0; }
+.data-safety-notice { position: fixed; z-index: 1000; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: min(900px, 94vw); width: max-content; padding: 12px 16px; border: 1px solid #b9cfc0; border-radius: 10px; background: #f1f8f3; box-shadow: 0 4px 20px #263b3020; color: #31483a; font-size: 13px; }
+.data-safety-notice.is-error { background: #fff7ed; border-color: #e7be8b; color: #784c21; }
+.data-safety-notice button { flex-shrink: 0; border: 1px solid currentColor; border-radius: 6px; padding: 5px 9px; color: inherit; background: transparent; cursor: pointer; }
+@media (max-width: 650px) { .data-safety-notice { flex-wrap: wrap; width: 92vw; } }

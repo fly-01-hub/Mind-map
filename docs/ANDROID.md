@@ -1,12 +1,12 @@
-# 安卓平板与完整备份（1.7.9）
+# 安卓平板与完整备份（1.7.10）
 
 ## 安装与迁移
 
-本地构建输出：`release/ResearchMind-1.7.9-android.apk`。源码提供构建脚本，仓库不附带签名密钥。
+本地构建输出：`release/ResearchMind-1.7.10-android.apk`。源码提供构建脚本，仓库不附带签名密钥。
 
-[直接下载安装包](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.9/ResearchMind-1.7.9-android.apk)。大小 4,673,193 字节；SHA-256：`C9D4A79F7FD0E93F9AE3D2023FC847DC5DC80C53E3092F242FE12D7B9F6EFACE`。本版优化大型导图编辑、撤销记录和自动保存，保留 PDF 连续阅读和节点交互修复。
+[直接下载安装包](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.10/ResearchMind-1.7.10-android.apk)。大小 4,680,966 字节；SHA-256：`A58E4605FAE6AA765EF0636EFE77E2EC25FD80A71488AAEB3E060CC4AA49C55D`。本版加强草稿恢复、保存失败重试和恢复前安全副本，保留大型导图优化与 PDF 连续阅读。
 
-包名 `com.fly01hub.researchmind`；versionName `1.7.9`，versionCode `10709`，沿用原签名以覆盖旧版；不要先卸载带资料的应用。最低安装系统 Android 9/API 28，目标 API 35，无特定 CPU 架构的原生库限制。安装门槛不等于 WebView 兼容保证：编辑器/PDF.js 还需设备可用的新版 Android System WebView，老旧 WebView 不保证兼容。保留设备安全保护，安装被拦截时不要绕过检查。
+包名 `com.fly01hub.researchmind`；versionName `1.7.10`，versionCode `10710`，沿用原签名以覆盖旧版；不要先卸载带资料的应用。最低安装系统 Android 9/API 28，目标 API 35，无特定 CPU 架构的原生库限制。安装门槛不等于 WebView 兼容保证：编辑器/PDF.js 还需设备可用的新版 Android System WebView，老旧 WebView 不保证兼容。保留设备安全保护，安装被拦截时不要绕过检查。
 
 1. 将 APK 复制到平板，用系统文件管理器打开并按提示安装。
 2. 在电脑“备份与恢复”中创建 `.researchmind` 备份，把该文件复制到平板。
@@ -14,6 +14,8 @@
 4. 编辑后重新导出备份，放到独立安全目录；卸载/清除应用数据前必须先备份。
 
 没有连接用户的真实平板，不宣称已安装到平板或完成真机输入法、系统文件选择器和升级验证。此版本优先适配平板，横屏编辑更宽裕，不是完整手机体验。
+
+1.7.10 在输入时保留草稿恢复记录，暂停时尝试提交，写入失败自动重试；恢复完整备份前保留最近两份本机安全副本。保护机制无需额外配置，但清除应用数据、卸载和设备故障仍需独立备份防护。详见 [资料保护](DATA_SAFETY.md)。
 
 ## 完整备份与备份文件夹
 
@@ -40,7 +42,7 @@
 
 后续覆盖升级必须保留同一密钥并递增 versionCode；不同电脑默认调试密钥通常不同。私下保管本机 `.android/debug.keystore`，不要上传 GitHub。签名变化时不要直接卸载带资料的旧程序，应先导出备份。
 
-versionName 与 package.json 一致，versionCode 按主版本×10000＋次版本×100＋补丁版本自动计算。1.7.9 的 APK 签名已通过工具验证，并核对与本机保留的 1.7.8 APK 相同；构建为不可调试的 release 包，没有申请联网或个人文件目录访问权限。包内 90 个网页资源与本轮 dist 逐字节一致，9 项安卓触屏模拟/生产资源专项通过；没有连接真机验证安装和覆盖升级。
+versionName 与 package.json 一致，versionCode 按主版本×10000＋次版本×100＋补丁版本自动计算。1.7.10 的 APK 签名已通过工具验证，并核对与本机保留的 1.7.9 APK 相同；构建为不可调试的 release 包，没有申请联网或个人文件目录访问权限。包内 93 个网页资源与本轮 dist 逐字节一致，9 项安卓触屏模拟/生产资源专项通过；没有连接真机验证安装和覆盖升级。
 
 ## 构建
 

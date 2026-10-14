@@ -13,7 +13,7 @@ test('creates a complete local backup from the library', async ({ page }) => {
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^ResearchMind-backup-.+\.researchmind$/)
   expect(await download.failure()).toBeNull()
-  await expect(page.getByRole('status')).toContainText('备份已保存')
+  await expect(page.getByRole('status')).toContainText('完整备份已开始下载')
 })
 
 test('creates a folder with an explicit confirmation and keeps it after refresh', async ({ page }) => {

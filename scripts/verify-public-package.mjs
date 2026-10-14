@@ -5,7 +5,7 @@ import * as asar from '@electron/asar'
 
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter((file) => file && existsSync(file))
 const forbidden = /(?:^|\/)(?:release|IndexedDB|Local Storage|\.lan-private|ResearchMind-data-before-[^/]*)(?:\/|$)|(?:^|\/)config\/lan\.local\.json$|\.(?:researchmind|pdf|xmind|opml|mm|sqlite3?|db|ldb|pem|key|csr|crt|cer|pfx|p12|jks|keystore|apk|aab)$/i
-const rejected = files.filter((file) => forbidden.test(file) || /(?:^|\/)\.env(?:\.|$)/.test(file) && !file.endsWith('.env.example'))
+const rejected = files.filter((file) => forbidden.test(file) || /(?:^|\/)ResearchMind-recovery-records[^/]*\.json$/i.test(file) || /(?:^|\/)\.env(?:\.|$)/.test(file) && !file.endsWith('.env.example'))
 if (rejected.length) throw new Error(`Private/generated files must not be published: ${rejected.join(', ')}`)
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 if (JSON.stringify(pkg.build.files) !== JSON.stringify(['dist/**/*', 'electron/**/*', 'package.json'])) throw new Error('Review installer file allowlist before publication')

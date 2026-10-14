@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { appDatabase } from '../../db/appDatabase'
 import { createNode } from '../../utils/tree'
-import { createLocalBackup, restoreLocalBackup } from './localBackupService'
+import { createLocalBackup, latestSafetyBackup, restoreLocalBackup } from './localBackupService'
 
 describe('local backup service', () => {
   beforeEach(async () => {
@@ -128,5 +128,28 @@ describe('local backup service', () => {
     payload.tables.documents[0].root = 'invalid'
     await expect(restoreLocalBackup(new Blob([JSON.stringify(payload)]))).rejects.toThrow('文档结构损坏')
     expect(await appDatabase.documents.get('keep')).toBeDefined()
+  })
+
+  it('keeps a complete safety backup and aborts replacement if the safety snapshot cannot be written', async () => {
+    const now = new Date().toISOString()
+    const original = { id: 'kept', title: 'before restore', root: createNode('before restore'), version: 1, isFavorite: false, createdAt: now, updatedAt: now }
+    await appDatabase.documents.put(original)
+    await appDatabase.paperFiles.put({ paperId: 'paper', blob: new Blob(['retained PDF']), cachedAt: now })
+    const payload = JSON.parse(await (await createLocalBackup()).blob.text())
+    payload.tables.documents[0].title = 'after restore'
+    const input = new Blob([JSON.stringify(payload)])
+    await restoreLocalBackup(input)
+    const snapshot = JSON.parse(await (await latestSafetyBackup())!.blob.text())
+    expect(snapshot.tables.documents[0]).toEqual(original)
+    expect(atob(snapshot.tables.paperFiles[0].blob.base64)).toBe('retained PDF')
+    const add = IDBObjectStore.prototype.add
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function(this: IDBObjectStore, ...args: Parameters<typeof add>) {
+      if (this.name === 'snapshots') throw new DOMException('quota', 'QuotaExceededError')
+      return add.apply(this, args)
+    })
+    try {
+      await expect(restoreLocalBackup(input)).rejects.toThrow('原有资料未被替换')
+      expect((await appDatabase.documents.get(original.id))?.title).toBe('after restore')
+    } finally { spy.mockRestore() }
   })
 })

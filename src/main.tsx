@@ -5,17 +5,13 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import './android.css'
 import App from './App.tsx'
-import { useDocumentStore } from './stores/documentStore'
 import { useSaveStore } from './stores/saveStore'
 import { isAndroidApp, printAndroidPage } from './services/platform/androidFiles'
+import { useDataSafetyStore } from './stores/dataSafetyStore'
 
 if (isAndroidApp()) {
   document.documentElement.dataset.platform = 'android'
   window.print = () => { void printAndroidPage().catch((error) => window.alert(error instanceof Error ? error.message : '打印失败。')) }
-  window.addEventListener('researchmind:pause', () => {
-    void import('./services/persistence/localPersistence').then(({ flushLocalPersistence }) => flushLocalPersistence())
-      .catch(() => useSaveStore.getState().setStatus('error'))
-  })
 }
 
 if (
@@ -23,15 +19,20 @@ if (
   && 'serviceWorker' in navigator && !isAndroidApp()
 ) {
   let reloadingForUpdate = false
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  const reloadAfterSaving = () => {
     if (reloadingForUpdate) return
     reloadingForUpdate = true
-    window.location.reload()
-  })
+    void import('./services/persistence/localPersistence')
+      .then(({ prepareForNavigation }) => prepareForNavigation())
+      .then(() => window.location.reload())
+      .catch(() => { reloadingForUpdate = false; useSaveStore.getState().setStatus('error') })
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', reloadAfterSaving)
 
   let activateUpdate: (reloadPage?: boolean) => Promise<void> = async () => {}
   activateUpdate = registerSW({
     immediate: true,
+    onNeedReload: reloadAfterSaving,
     onNeedRefresh: () => { void activateUpdate(true) },
     onRegisteredSW: (_serviceWorkerUrl, registration) => {
       if (!registration) return
@@ -62,7 +63,7 @@ async function bootstrapData() {
   await initializeLocalPersistence()
 }
 
-void bootstrapData().catch(() => {
-  useDocumentStore.setState({ hydrated: true })
+void bootstrapData().catch((error: unknown) => {
+  useDataSafetyStore.setState({ startupError: error instanceof Error ? error.message : '本地资料读取失败，请重新打开应用。' })
   useSaveStore.getState().setStatus('error')
 })

@@ -14,8 +14,7 @@ it('serializes overlapping saves and reads the latest state for the second save'
   let started!: () => void
   const savingStarted = new Promise<void>((resolve) => { started = resolve })
   const firstSave = new Promise<void>((resolve) => { release = resolve })
-  const save = vi.spyOn(documentRepository, 'saveDocuments').mockImplementationOnce(async () => { started(); await firstSave; return 'serialized' }).mockResolvedValue('serialized')
-  vi.spyOn(documentRepository, 'saveFolders').mockResolvedValue('folder')
+  const save = vi.spyOn(documentRepository, 'saveWorkspace').mockImplementationOnce(async () => { started(); await firstSave }).mockResolvedValue(undefined)
   vi.spyOn(documentRepository, 'createVersion').mockResolvedValue({ id: 'version', documentId: document.id, version: 1, title: document.title, root, createdAt: root.createdAt, reason: 'interval' })
   const first = flushLocalPersistence()
   await savingStarted
@@ -36,19 +35,17 @@ it('writes only changed documents and retries an edit after a failed write', asy
   const second = makeDocument('dirty-second')
   const folders: [] = []
   useDocumentStore.setState({ documents: [first, second], folders })
-  const save = vi.spyOn(documentRepository, 'saveDocuments').mockResolvedValue(first.id)
-  const saveFolders = vi.spyOn(documentRepository, 'saveFolders').mockResolvedValue('folder')
+  const save = vi.spyOn(documentRepository, 'saveWorkspace').mockResolvedValue(undefined)
   vi.spyOn(documentRepository, 'createVersion').mockImplementation(async (document) => ({ id: document.id, documentId: document.id, version: document.version, title: document.title, root: document.root, createdAt: document.createdAt, reason: 'interval' }))
   await flushLocalPersistence()
   save.mockClear()
-  saveFolders.mockClear()
   const edited = { ...second, version: 2, root: { ...second.root, note: 'changed' } }
   useDocumentStore.setState({ documents: [first, edited] })
   save.mockRejectedValueOnce(new Error('write failed'))
   await expect(flushLocalPersistence()).rejects.toThrow('write failed')
   await flushLocalPersistence()
   expect(save.mock.calls.map(([documents]) => documents.map((document) => document.id))).toEqual([[second.id], [second.id]])
-  expect(saveFolders).not.toHaveBeenCalled()
+  expect(save.mock.calls.every(([, folders]) => folders === undefined)).toBe(true)
   await flushLocalPersistence()
   expect(save).toHaveBeenCalledTimes(2)
 })

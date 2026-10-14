@@ -45,4 +45,16 @@ describe('document batch persistence', () => {
     expect((await appDatabase.documents.get('safe'))?.title).toBe('原名')
     expect(await appDatabase.documents.count()).toBe(1)
   })
+
+  it('rejects a stale writer and rolls documents and folders back together', async () => {
+    const root = createNode('version one')
+    const original: MindMapDocument = { id: 'guarded', title: root.title, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+    const newer = { ...original, version: 3, updatedAt: 'newer', root: { ...root, note: 'saved elsewhere' } }
+    await appDatabase.documents.put(newer)
+    await expect(documentRepository.saveWorkspace([{ ...original, version: 2 }], undefined, { documents: new Map([[original.id, original]]) })).rejects.toThrow('停止覆盖')
+    expect(await appDatabase.documents.get(original.id)).toEqual(newer)
+    const malformed = { name: 'invalid key' } as unknown as import('../types/mindmap').FolderData
+    await expect(documentRepository.saveWorkspace([{ ...newer, title: 'must roll back' }], [malformed])).rejects.toThrow()
+    expect(await appDatabase.documents.get(original.id)).toEqual(newer)
+  })
 })

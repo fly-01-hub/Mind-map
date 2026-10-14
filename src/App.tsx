@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useDocumentStore } from './stores/documentStore'
+import { useDataSafetyStore } from './stores/dataSafetyStore'
+import { DataSafetyNotice, StartupProtection } from './features/backup/DataSafety'
 
 const LibraryPage = lazy(() => import('./features/library/LibraryPage').then((module) => ({ default: module.LibraryPage })))
 const MapEditorPage = lazy(() => import('./features/mindmap/MapEditorPage').then((module) => ({ default: module.MapEditorPage })))
@@ -9,9 +11,11 @@ const AnnotationsPage = lazy(() => import('./features/paper/AnnotationsPage').th
 
 export default function App() {
   const hydrated = useDocumentStore((state) => state.hydrated)
+  const blocked = useDataSafetyStore((state) => Boolean(state.startupError || state.waitingForWriter))
+  if (blocked) return <StartupProtection />
   if (!hydrated) return <main className="app-loading"><span /></main>
   return (
-    <Suspense fallback={<main className="app-loading"><span /></main>}>
+    <><DataSafetyNotice /><Suspense fallback={<main className="app-loading"><span /></main>}>
       <Routes>
         <Route path="/login" element={<Navigate to="/library" replace />} />
         <Route path="/library" element={<LibraryPage />} />
@@ -20,6 +24,6 @@ export default function App() {
         <Route path="/annotations" element={<AnnotationsPage />} />
         <Route path="*" element={<Navigate to="/library" replace />} />
       </Routes>
-    </Suspense>
+    </Suspense></>
   )
 }
