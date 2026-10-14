@@ -12,6 +12,8 @@
 
 Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.8-x64.exe`。
 
+安卓平板：[下载 ResearchMind 1.7.8 APK](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.8/ResearchMind-1.7.8-android.apk)，Android 9 及以上。覆盖升级前先导出完整备份，安装与迁移见 [安卓说明](docs/ANDROID.md)。
+
 本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库独立维护：main 分支放使用说明与虚构示例的演示素材，Release 放 EXE 附件，gh-pages 分支只放网页构建资源，不共享本仓库的源码或提交历史。Release 的自动 “Source code” ZIP/TAR 对应公开 main 分支的说明和演示；gh-pages 的 ZIP 包含可查看的网页运行资源，均不是原始开发工程。
 
 安装前关闭旧版并创建完整备份。未提供可信商业签名，系统可能拦截安装；不要关闭或绕过安全保护。新安装为空白，正常覆盖升级保留原用户数据。其他人不会得到开发者的本地知识库。

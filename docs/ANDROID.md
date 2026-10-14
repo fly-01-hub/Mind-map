@@ -1,10 +1,12 @@
-# 安卓平板与完整备份（1.7.5）
+# 安卓平板与完整备份（1.7.8）
 
 ## 安装与迁移
 
-本地构建输出：`release/ResearchMind-1.7.5-android.apk`。源码提供构建脚本，仓库不附带签名密钥。
+本地构建输出：`release/ResearchMind-1.7.8-android.apk`。源码提供构建脚本，仓库不附带签名密钥。
 
-包名 `com.fly01hub.researchmind`；versionName `1.7.5`，versionCode `10705`，沿用原签名以覆盖旧版；不要先卸载带资料的应用。最低安装系统 Android 9/API 28，目标 API 35，无特定 CPU 架构的原生库限制。安装门槛不等于 WebView 兼容保证：编辑器/PDF.js 还需设备可用的新版 Android System WebView，老旧 WebView 不保证兼容。保留设备安全保护，安装被拦截时不要绕过检查。
+[直接下载安装包](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.8/ResearchMind-1.7.8-android.apk)。大小 4,671,633 字节；SHA-256：`C2ACE3581DCF9D7187309C295BE20BCB1EB1919EDB72ECECE62CEAC899F5849C`。包含 1.7.8 PDF 连续滚动阅读和节点交互修复。
+
+包名 `com.fly01hub.researchmind`；versionName `1.7.8`，versionCode `10708`，沿用原签名以覆盖旧版；不要先卸载带资料的应用。最低安装系统 Android 9/API 28，目标 API 35，无特定 CPU 架构的原生库限制。安装门槛不等于 WebView 兼容保证：编辑器/PDF.js 还需设备可用的新版 Android System WebView，老旧 WebView 不保证兼容。保留设备安全保护，安装被拦截时不要绕过检查。
 
 1. 将 APK 复制到平板，用系统文件管理器打开并按提示安装。
 2. 在电脑“备份与恢复”中创建 `.researchmind` 备份，把该文件复制到平板。
@@ -37,6 +39,8 @@
 构建脚本生成 `debuggable=false` 的 release 包；默认使用构建电脑的 Android 调试密钥作个人签名，不是商店签名。
 
 后续覆盖升级必须保留同一密钥并递增 versionCode；不同电脑默认调试密钥通常不同。私下保管本机 `.android/debug.keystore`，不要上传 GitHub。签名变化时不要直接卸载带资料的旧程序，应先导出备份。
+
+versionName 与 package.json 一致，versionCode 按主版本×10000＋次版本×100＋补丁版本自动计算。1.7.8 的 APK 签名已通过工具验证，并核对与本机保留的 1.7.4 APK 相同；构建为不可调试的 release 包，没有申请联网或个人文件目录访问权限。包内 90 个网页资源与本轮 dist 逐字节一致，9 项安卓触屏模拟/生产资源专项通过；没有连接真机验证安装和覆盖升级。
 
 ## 构建
 

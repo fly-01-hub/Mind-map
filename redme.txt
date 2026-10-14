@@ -1,8 +1,21 @@
 ResearchMind 枝间：完整项目接手说明（给新对话中的 AI）
-整理日期：2026-10-13，Asia/Shanghai
+整理日期：2026-10-14，Asia/Shanghai
 项目目录：D:\app\siweidaotu
 源码版本：1.7.8；数据库 schema v3；完整备份格式 v1
 本文是私有源码仓库的维护交接，不是公开下载仓库的用户说明。保留 redme.txt 的现有拼写。
+
+============================================================
+最新补充：2026-10-14 提供最新版安卓 APK 1.7.8（优先于下文历史快照）
+============================================================
+
+  - 用户要求最新版安卓安装包；已从 1.7.8 源码构建 release/ResearchMind-1.7.8-android.apk，并添加到公开 v1.7.8 Release，保留原 Windows 安装包和网页。
+  - 直达下载：https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.8/ResearchMind-1.7.8-android.apk
+  - APK 大小 4671633 字节；SHA-256：C2ACE3581DCF9D7187309C295BE20BCB1EB1919EDB72ECECE62CEAC899F5849C。上传返回的 GitHub SHA-256 与大小一致；匿名 HEAD 返回 200、长度一致。
+  - 包名 com.fly01hub.researchmind，versionName 1.7.8，versionCode 10708；minSdk 28（Android 9），target/compile SDK 35。versionCode 已改为由 package.json 的版本自动推导，防止以后版本名更新但升级序号未更新。
+  - apksigner 验证通过；公钥证书与本机保留的 1.7.4 APK 相同。没有重新生成签名密钥，没有卸载或安装到用户设备。覆盖升级前先导出完整备份，不先卸载已有应用。
+  - Gradle 离线缓存构建成功，9 项安卓专项通过；APK 中 90 个网页资源与本次 dist 逐字节一致，未包含个人 PDF/数据库/备份或密钥。应用未申请网络、所有文件访问等权限；没有连接真机做安装或覆盖升级验收。
+  - 公开 README.md/redme.txt 与 Release 说明补充安卓下载及升级说明，源码仓库 Private 再次确认。私有 docs/ANDROID.md 与 README.md 已更新；公开分发脚本仅更新 Windows 校验值，保留独立的安卓 SHA-256，避免后续 Windows 发行误改 APK 校验值。
+  - 现有网页版/Windows 版本仍为 1.7.8，数据库与备份格式不变；本轮没有增加 AI 功能。APK、签名材料和生成资源均不提交到源码 Git。
 
 ============================================================
 最新补充：2026-10-13 PDF 连续滚动阅读，版本 1.7.8（优先于下文历史快照）

@@ -160,7 +160,7 @@ readme = readme
   .replace(/releases\/download\/v\d+\.\d+\.\d+\//g, `releases/download/${tag}/`)
   .replace(/当前版本：\*\*\d+\.\d+\.\d+\*\*/, `当前版本：**${version}**`)
   .replace(/安装包大小：[0-9,]+ 字节/, `安装包大小：${size.toLocaleString('en-US')} 字节`)
-  .replace(/\b[A-F0-9]{64}\b/g, hash)
+  .replace(/(安装包大小：[\s\S]*?SHA-256：[\s\S]*?)[A-F0-9]{64}/, (_match, prefix) => prefix + hash)
 readme = readme.replace('仅提供使用说明及 Windows EXE 安装包', '提供使用说明、Windows EXE 安装包和网页版构建资源（gh-pages 分支）')
 readme = readme.replace('在思维导图中双击节点编辑文字，选中节点后按', '在思维导图中双击普通节点编辑文字；PDF 文献节点单击选中、双击打开分栏。选中节点后显示加减按钮，按')
 if (!readme.includes('连续滚动阅读')) readme = readme.replace('## 保存、完整备份与恢复', 'PDF 支持上下连续滚动阅读，独立阅读与导图分栏均可使用。顶部页码跟随滚动，仍可输入页码或用上一页/下一页跳转；关闭后恢复页码和页内位置。长文献只渲染视口附近的页面。\n\n## 保存、完整备份与恢复')
