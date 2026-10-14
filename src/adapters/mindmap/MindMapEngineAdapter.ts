@@ -10,6 +10,7 @@ import { downloadBlob } from '../../services/export/download'
 import { compactRichText, plainTextFromRichText, richTextFromPlain, sanitizeRichText } from '../../utils/richText'
 import { clearWikiEditor, decorateWikiLinks, highlightWikiEditor } from '../../utils/wikiLinks'
 import { minimalViewportPan } from '../../utils/viewportPan'
+import { incrementalTree, sameNodeContent, type TreePatch } from './incrementalTree'
 
 interface EngineMetadata {
   createdAt: string
@@ -73,9 +74,22 @@ export class MindMapEngineAdapter {
   private stopEditVisibility?: () => void
   private viewportResize: ResizeObserver
   private viewportResizeFrame = 0
+  private renderedRoot?: NodeData
+  private renderedArrows = '[]'
+  private renderedSummaries = '[]'
+  private documentNames = ''
+  private documentNamesVersion = 0
+  private textCache = new WeakMap<HTMLElement, { text: HTMLElement; key: string }>()
+  private htmlCache = new Map<string, string>()
+  private appearance = 'paper:false'
 
   setDocuments(documents: MindMapDocument[]) {
     this.documents = documents
+    const names = JSON.stringify(documents.map(({ id, title, linkAliases, deletedAt }) => [id, title, linkAliases, deletedAt]))
+    if (names === this.documentNames) return
+    this.documentNames = names
+    this.documentNamesVersion += 1
+    this.htmlCache.clear()
     this.applyRichText()
   }
 
@@ -84,6 +98,8 @@ export class MindMapEngineAdapter {
   }
 
   setSourceCounts(counts: Record<string, number>) {
+    if (Object.keys(counts).length === Object.keys(this.sourceCounts).length
+      && Object.entries(counts).every(([id, count]) => this.sourceCounts[id] === count)) return
     this.sourceCounts = counts
     this.applyRichText()
   }
@@ -142,13 +158,16 @@ export class MindMapEngineAdapter {
       if (!this.refreshing) events.onSelectionChange(this.engine.currentNodes.map((node) => node.nodeObj.id))
     })
     this.engine.bus.addListener('operation', (operation) => {
-      if (this.disposed || operation.name === 'beginEdit') return
+      if (this.disposed || this.refreshing || operation.name === 'beginEdit') return
       const map = this.getMap()
+      this.acceptEngineMap(map)
       events.onMapChange(map.root, map.arrows, map.summaries, operation)
     })
     this.engine.bus.addListener('expandNode', () => {
-      if (!this.disposed) {
+      if (!this.disposed && !this.refreshing) {
         const map = this.getMap()
+        this.acceptEngineMap(map)
+        this.applyRichText()
         events.onMapChange(map.root, map.arrows, map.summaries, { name: 'expandNode' })
       }
     })
@@ -156,6 +175,9 @@ export class MindMapEngineAdapter {
 
   async init(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
     await this.engine.init(this.toEngineData(root, arrows, summaries))
+    this.renderedRoot = root
+    this.renderedArrows = JSON.stringify(arrows)
+    this.renderedSummaries = JSON.stringify(summaries)
     this.applyRichText()
     requestAnimationFrame(() => this.applyRichText())
     this.engine.toCenter()
@@ -163,19 +185,31 @@ export class MindMapEngineAdapter {
 
   render(root: NodeData, arrows: MapArrow[] = [], summaries: MapSummary[] = []) {
     if (this.disposed || !this.engine.nodeData) return
+    const arrowKey = JSON.stringify(arrows)
+    const summaryKey = JSON.stringify(summaries)
+    const sameRelations = arrowKey === this.renderedArrows && summaryKey === this.renderedSummaries
+    if (root === this.renderedRoot && sameRelations) return
     const selection = this.engine.currentNodes.map((node) => node.nodeObj.id)
     const anchor = this.captureLayoutAnchor()
     const rootChanged = this.engine.nodeData.id !== root.id
     this.refreshing = true
     try {
-      this.engine.refresh(this.toEngineData(root, arrows, summaries))
-      this.applyRichText()
+      const patch = sameRelations && this.renderedRoot ? incrementalTree(this.renderedRoot, root) : undefined
+      const patched = patch && this.canApplyPatch(patch, arrows.length > 0 || summaries.length > 0)
+      if (patched) this.applyPatch(patch)
+      else {
+        this.engine.refresh(this.toEngineData(root, arrows, summaries))
+        this.applyRichText()
+      }
+      this.renderedRoot = root
+      this.renderedArrows = arrowKey
+      this.renderedSummaries = summaryKey
       // Replacing the displayed tree (import / focus navigation) is deliberate
       // navigation. Its old anchor no longer exists and must not strand the
       // new root off-screen. Ordinary edits keep the existing screen anchor.
       if (rootChanged) this.engine.toCenter()
       else this.restoreLayoutAnchor(anchor)
-      requestAnimationFrame(() => {
+      if (!patched) requestAnimationFrame(() => {
         if (this.disposed) return
         const currentAnchor = this.captureLayoutAnchor()
         this.applyRichText()
@@ -244,6 +278,7 @@ export class MindMapEngineAdapter {
             queueMicrotask(() => {
               if (this.disposed) return
               const map = this.getMap()
+              this.acceptEngineMap(map)
               this.events.onMapChange(map.root, map.arrows, map.summaries, {
                 name: 'finishEdit', target: element.nodeObj, origin: element.nodeObj.topic,
               })
@@ -319,6 +354,9 @@ export class MindMapEngineAdapter {
   }
 
   setAppearance(theme: 'paper' | 'ocean' | 'warm' | 'mono', compact: boolean) {
+    const appearance = `${theme}:${compact}`
+    if (this.appearance === appearance) return
+    this.appearance = appearance
     const selection = this.engine.currentNodes.map((node) => node.nodeObj.id)
     const anchor = this.captureLayoutAnchor()
     this.refreshing = true
@@ -502,13 +540,13 @@ export class MindMapEngineAdapter {
   }
 
   getTree(): NodeData {
-    return this.fromEngineNode(this.engine.getData().nodeData)
+    return this.readEngineTree(this.engine.getData().nodeData)
   }
 
   getMap(): { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] } {
     const data = this.engine.getData()
     return {
-      root: this.fromEngineNode(data.nodeData),
+      root: this.readEngineTree(data.nodeData),
       arrows: structuredClone((data.arrows ?? []) as MapArrow[]),
       summaries: structuredClone(data.summaries ?? []),
     }
@@ -602,25 +640,116 @@ export class MindMapEngineAdapter {
     if (Math.abs(delta.x) > .5 || Math.abs(delta.y) > .5) this.panBy(delta.x, delta.y)
   }
 
-  private applyRichText() {
+  private canApplyPatch(patch: TreePatch, hasRelations: boolean) {
+    // The current engine has no asynchronous before-hooks. Its public node
+    // operations mutate synchronously, and their echoed events are suppressed
+    // by refreshing. Complex relation/structure edits retain full refresh.
+    if (hasRelations && (patch.insertion || patch.removal)) return false
+    const ids = [...patch.updates, ...patch.toggles].map((node) => node.id)
+    if (patch.insertion) ids.push(patch.insertion.parentId, ...(patch.insertion.beforeId ? [patch.insertion.beforeId] : []))
+    if (patch.removal) ids.push(patch.removal)
+    return ids.every((id) => Boolean(this.safeFind(id)))
+  }
+
+  private acceptEngineMap(map: { root: NodeData; arrows: MapArrow[]; summaries: MapSummary[] }) {
+    // Native editing/dragging has already updated the engine. Record that tree
+    // so React does not apply the same edit and layout for a second time.
+    const patch = this.renderedRoot ? incrementalTree(this.renderedRoot, map.root) : undefined
+    this.renderedRoot = map.root
+    this.renderedArrows = JSON.stringify(map.arrows)
+    this.renderedSummaries = JSON.stringify(map.summaries)
+    if (patch) {
+      const topics: Topic<EngineMetadata>[] = []
+      for (const node of patch.updates) {
+        const topic = this.safeFind(node.id)
+        if (!topic) continue
+        // Escape can leave old rich-text metadata after the native plain-text
+        // commit. Use the validated store representation, as full refresh did.
+        if (topic.nodeObj.metadata) topic.nodeObj.metadata.richText = node.richText
+        topics.push(topic)
+      }
+      this.applyRichText(topics)
+    } else this.applyRichText()
+  }
+
+  private applyPatch(patch: TreePatch) {
+    const topics = new Set<HTMLElement>()
+    if (patch.removal) void this.engine.removeNodes([this.safeFind(patch.removal)!])
+    if (patch.insertion) {
+      const { node, parentId, beforeId } = patch.insertion
+      const engineNode = this.toEngineNode(node)
+      if (beforeId) void this.engine.insertSibling('before', this.safeFind(beforeId)!, engineNode)
+      else void this.engine.addChild(this.safeFind(parentId)!, engineNode)
+      topics.add(this.safeFind(node.id)!)
+    }
+    for (const node of patch.updates) {
+      const topic = this.safeFind(node.id)!
+      const data = this.toEngineNode({ ...node, children: [] })
+      // Preserve the engine's existing children and parent pointers.
+      const { children: _children, expanded: _expanded, ...content } = data
+      const old = topic.nodeObj
+      const visualKeys = ['topic', 'style', 'tags', 'icons', 'hyperLink', 'image'] as const
+      if (visualKeys.every((key) => JSON.stringify(old[key]) === JSON.stringify(content[key]))) {
+        // Updating an existing note or attachment description changes metadata,
+        // without changing topic size or requiring all connectors to be drawn.
+        old.metadata = content.metadata
+      } else {
+        topic.removeAttribute('style')
+        void this.engine.reshapeNode(topic, content)
+      }
+      topics.add(topic)
+    }
+    for (const node of patch.toggles) {
+      const topic = this.safeFind(node.id)!
+      if (node.children.length && topic.nodeObj.expanded !== !node.collapsed) this.engine.expandNode(topic, !node.collapsed)
+      else topic.nodeObj.expanded = !node.collapsed
+      // Expansion creates topics for descendants; decorate those new elements.
+      if (!node.collapsed) this.applyRichText()
+    }
+    this.applyRichText(topics)
+  }
+
+  private applyRichText(topics: Iterable<HTMLElement> = this.engine.nodes.querySelectorAll<HTMLElement>('.me-tpc')) {
     if (this.disposed) return
-    this.engine.nodes.querySelectorAll<HTMLElement>('.me-tpc').forEach((topic) => {
+    for (const topic of topics) {
       const element = topic as Topic<EngineMetadata>
       const richText = element.nodeObj?.metadata?.richText
       const text = topic.querySelector<HTMLElement>(':scope > .text')
-      if (text) text.innerHTML = decorateWikiLinks(richText ?? richTextFromPlain(element.nodeObj.topic), this.documents)
-      topic.querySelector(':scope > .node-source-badge')?.remove()
+      if (text) {
+        const plain = element.nodeObj.topic
+        const hasLinks = plain.includes('[[') || Boolean(richText?.includes('['))
+        const key = `${richText ?? plain}\u0000${richText ? 'html' : 'plain'}\u0000${hasLinks ? this.documentNamesVersion : ''}`
+        const previous = this.textCache.get(topic)
+        if (previous?.text !== text || previous.key !== key) {
+          if (!richText && !hasLinks && !plain.includes('\n')) {
+            if (text.textContent !== plain) text.textContent = plain
+          } else {
+            let html = this.htmlCache.get(key)
+            if (html === undefined) {
+              html = decorateWikiLinks(richText ?? richTextFromPlain(plain), this.documents)
+              if (this.htmlCache.size >= 10_000) this.htmlCache.clear()
+              this.htmlCache.set(key, html)
+            }
+            if (text.innerHTML !== html) text.innerHTML = html
+          }
+          this.textCache.set(topic, { text, key })
+        }
+      }
+      const existingBadge = topic.querySelector<HTMLButtonElement>(':scope > .node-source-badge')
       const count = this.sourceCounts[element.nodeObj?.id]
+      if (existingBadge?.dataset.count === String(count ?? 0)) continue
+      existingBadge?.remove()
       if (count) {
         const badge = document.createElement('button')
         badge.type = 'button'; badge.className = 'node-source-badge'
         badge.dataset.sourceNodeId = element.nodeObj.id
+        badge.dataset.count = String(count)
         badge.textContent = `📄${count}`
         badge.setAttribute('aria-label', `查看 ${count} 条论文来源`)
         badge.title = '查看来源并在导图旁定位原文'
         topic.append(badge)
       }
-    })
+    }
   }
 
   private toEngineData(root: NodeData, arrows: MapArrow[], summaries: MapSummary[]): MindElixirData<EngineMetadata> {
@@ -651,7 +780,7 @@ export class MindMapEngineAdapter {
       topic: node.title,
       expanded: !node.collapsed,
       children: node.children.map((child) => this.toEngineNode(child)),
-      tags: node.tags,
+      tags: [...node.tags],
       icons: [
         node.taskStatus === 'todo' ? '☐' : node.taskStatus === 'doing' ? '◒' : node.taskStatus === 'done' ? '☑' : undefined,
         node.icon,
@@ -662,21 +791,31 @@ export class MindMapEngineAdapter {
         node.attachments.length ? '📎' : undefined,
       ].filter((value): value is string => Boolean(value)),
       hyperLink: node.hyperlink,
-      image: node.image,
+      image: node.image && { ...node.image },
       style,
       metadata: {
         createdAt: node.createdAt, updatedAt: node.updatedAt, order: node.order,
         taskStatus: node.taskStatus, note: node.note,
-        attachments: node.attachments, style: node.style, code: node.code, formula: node.formula, icon: node.icon,
+        attachments: structuredClone(node.attachments), style: { ...node.style }, code: node.code, formula: node.formula, icon: node.icon,
         richText: node.richText,
-        table: node.table,
+        table: node.table && structuredClone(node.table),
       },
     }
   }
 
-  private fromEngineNode(node: NodeObj<EngineMetadata>, order = 0): NodeData {
+  private readEngineTree(node: NodeObj<EngineMetadata>) {
+    const previous = new Map<string, NodeData>()
+    const index = (current: NodeData) => {
+      previous.set(current.id, current)
+      current.children.forEach(index)
+    }
+    if (this.renderedRoot) index(this.renderedRoot)
+    return this.fromEngineNode(node, 0, previous)
+  }
+
+  private fromEngineNode(node: NodeObj<EngineMetadata>, order: number, previous: Map<string, NodeData>): NodeData {
     const metadata = node.metadata ?? defaultMetadata()
-    return {
+    const result: NodeData = {
       id: node.id, title: node.topic,
       richText: metadata.richText && plainTextFromRichText(metadata.richText) === node.topic ? metadata.richText : undefined,
       collapsed: node.expanded === false, order,
@@ -686,7 +825,12 @@ export class MindMapEngineAdapter {
       icon: metadata.icon, image: node.image, attachments: metadata.attachments,
       code: metadata.code, formula: metadata.formula,
       table: metadata.table,
-      children: (node.children ?? []).map((child, index) => this.fromEngineNode(child, index)),
+      children: (node.children ?? []).map((child, index) => this.fromEngineNode(child, index, previous)),
     }
+    const existing = previous.get(node.id)
+    return existing && existing.order === order && existing.collapsed === result.collapsed
+      && existing.children.length === result.children.length
+      && result.children.every((child, index) => child === existing.children[index])
+      && sameNodeContent(existing, result) ? existing : result
   }
 }

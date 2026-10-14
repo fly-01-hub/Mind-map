@@ -26,3 +26,29 @@ it('serializes overlapping saves and reads the latest state for the second save'
   await Promise.all([first, second])
   expect(save.mock.calls.map(([documents]) => documents[0].title)).toEqual(['旧标题', '新标题'])
 })
+
+it('writes only changed documents and retries an edit after a failed write', async () => {
+  const makeDocument = (id: string) => {
+    const root = createNode(id)
+    return { id, title: id, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+  }
+  const first = makeDocument('dirty-first')
+  const second = makeDocument('dirty-second')
+  const folders: [] = []
+  useDocumentStore.setState({ documents: [first, second], folders })
+  const save = vi.spyOn(documentRepository, 'saveDocuments').mockResolvedValue(first.id)
+  const saveFolders = vi.spyOn(documentRepository, 'saveFolders').mockResolvedValue('folder')
+  vi.spyOn(documentRepository, 'createVersion').mockImplementation(async (document) => ({ id: document.id, documentId: document.id, version: document.version, title: document.title, root: document.root, createdAt: document.createdAt, reason: 'interval' }))
+  await flushLocalPersistence()
+  save.mockClear()
+  saveFolders.mockClear()
+  const edited = { ...second, version: 2, root: { ...second.root, note: 'changed' } }
+  useDocumentStore.setState({ documents: [first, edited] })
+  save.mockRejectedValueOnce(new Error('write failed'))
+  await expect(flushLocalPersistence()).rejects.toThrow('write failed')
+  await flushLocalPersistence()
+  expect(save.mock.calls.map(([documents]) => documents.map((document) => document.id))).toEqual([[second.id], [second.id]])
+  expect(saveFolders).not.toHaveBeenCalled()
+  await flushLocalPersistence()
+  expect(save).toHaveBeenCalledTimes(2)
+})

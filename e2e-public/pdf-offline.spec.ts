@@ -5,7 +5,14 @@ async function waitForOfflineInstallation(page: Page) {
   await page.goto('/library')
   await expect(page.getByRole('button', { name: '新建思维导图', exact: true })).toBeVisible()
   await page.waitForLoadState('networkidle')
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  await expect.poll(async () => {
+    try { return await page.evaluate(() => Boolean(navigator.serviceWorker.controller)) }
+    catch (error) {
+      // The first worker activation may reload the document during this read.
+      if (error instanceof Error && error.message.includes('Execution context was destroyed')) return false
+      throw error
+    }
+  }).toBe(true)
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
 }
 

@@ -14,12 +14,9 @@ export function createNode(title = '新主题'): NodeData {
 }
 
 export function normalizeOrders(node: NodeData): NodeData {
-  return {
-    ...node,
-    children: node.children.map((child, index) =>
-      normalizeOrders({ ...child, order: index }),
-    ),
-  }
+  const children = node.children.map((child, index) =>
+    normalizeOrders(child.order === index ? child : { ...child, order: index }))
+  return children.every((child, index) => child === node.children[index]) ? node : { ...node, children }
 }
 
 export function findNode(root: NodeData, id: string): NodeData | undefined {
@@ -43,7 +40,8 @@ export function findParent(root: NodeData, id: string): ParentMatch | undefined 
 
 export function mapNode(root: NodeData, id: string, mapper: (node: NodeData) => NodeData): NodeData {
   if (root.id === id) return mapper(root)
-  return { ...root, children: root.children.map((child) => mapNode(child, id, mapper)) }
+  const children = root.children.map((child) => mapNode(child, id, mapper))
+  return children.every((child, index) => child === root.children[index]) ? root : { ...root, children }
 }
 
 export function insertChild(root: NodeData, parentId: string, node = createNode()): NodeData {

@@ -8,7 +8,13 @@ test('Pages supports an empty first launch, hash routes, saved maps and first of
   await expect(page.getByText('这里还没有思维导图', { exact: true })).toBeVisible()
   await expect(page).toHaveURL(/Mind-map-download\/#\/library$/)
   // Public hosting must download the whole precache before offline use is ready.
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 45_000 }).toBe(true)
+  await expect.poll(async () => {
+    try { return await page.evaluate(() => Boolean(navigator.serviceWorker.controller)) }
+    catch (error) {
+      if (error instanceof Error && error.message.includes('Execution context was destroyed')) return false
+      throw error
+    }
+  }, { timeout: 45_000 }).toBe(true)
   const manifest = await page.evaluate(async () => (await fetch('manifest.webmanifest')).json())
   expect(manifest.scope).toBe('/Mind-map-download/')
   expect(manifest.start_url).toBe('/Mind-map-download/#/library')

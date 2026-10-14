@@ -1,6 +1,6 @@
 # ResearchMind 枝间
 
-本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.8**。
+本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.9**。
 
 [免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest)。源码保持私有，公开网页只分发构建后的运行资源，各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
 
@@ -10,11 +10,11 @@
 
 ## 下载与运行
 
-Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.8-x64.exe`。
+Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-download](https://github.com/fly-01-hub/Mind-map-download)，或直接打开 [公开 GitHub Releases](https://github.com/fly-01-hub/Mind-map-download/releases/latest)，选择 `ResearchMind-Setup-1.7.9-x64.exe`。
 
-安卓平板：[下载 ResearchMind 1.7.8 APK](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.8/ResearchMind-1.7.8-android.apk)，Android 9 及以上。覆盖升级前先导出完整备份，安装与迁移见 [安卓说明](docs/ANDROID.md)。
+安卓平板：[下载 ResearchMind 1.7.9 APK](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.9/ResearchMind-1.7.9-android.apk)，Android 9 及以上。覆盖升级前先导出完整备份，安装与迁移见 [安卓说明](docs/ANDROID.md)。
 
-本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库独立维护：main 分支放使用说明与虚构示例的演示素材，Release 放 EXE 附件，gh-pages 分支只放网页构建资源，不共享本仓库的源码或提交历史。Release 的自动 “Source code” ZIP/TAR 对应公开 main 分支的说明和演示；gh-pages 的 ZIP 包含可查看的网页运行资源，均不是原始开发工程。
+本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库独立维护：main 分支放使用说明与虚构示例的演示素材，Release 放 EXE/APK 附件，gh-pages 分支只放网页构建资源，不共享本仓库的源码或提交历史。Release 的自动 “Source code” ZIP/TAR 对应公开 main 分支的说明和演示；gh-pages 的 ZIP 包含可查看的网页运行资源，均不是原始开发工程。
 
 安装前关闭旧版并创建完整备份。未提供可信商业签名，系统可能拦截安装；不要关闭或绕过安全保护。新安装为空白，正常覆盖升级保留原用户数据。其他人不会得到开发者的本地知识库。
 
@@ -51,6 +51,8 @@ PWA 可在支持的浏览器中安装为独立窗口，但本地网页仍需本�
 
 操作细节：[快捷键](docs/SHORTCUTS.md)、[节点按钮](docs/NODE_CONTROLS.md)、[文字颜色](docs/TEXT_COLORS.md)、[节点排序](docs/NODE_ORDER.md)、[画布稳定性](docs/VIEWPORT_STABILITY.md)、[双向链接](docs/DOCUMENT_LINKS.md)、[PDF 知识库](docs/PDF_KNOWLEDGE.md)、[安卓](docs/ANDROID.md)。
 
+1.7.9 优化大型导图：常见编辑按变化更新，撤销记录共享未变分支，自动保存只写入变动文档。5,000 节点生产回归验证新增、撤销/重做和刷新后的内容；复杂结构编辑仍完整刷新，具体速度取决于设备与内容。详见 [性能说明](docs/PERFORMANCE.md)。
+
 ## 数据与隐私
 
 数据存储在当前用户的本地 IndexedDB 中。Windows 使用固定 `app://researchmind` 来源及 ResearchMind 用户配置目录。源码、安装包和 GitHub 构建均不复制开发者的浏览器配置或桌面用户数据。
@@ -75,7 +77,7 @@ npm run desktop:build
 npm run desktop:test
 ```
 
-Windows 输出 `release/ResearchMind-Setup-1.7.8-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布。执行 `npm run release:public` 可完成检查、安装包构建、网页构建及公开发行；凭据从当前 GitHub 登录读取，不写入文件。公开上传严格限制为 EXE、使用说明及网页构建资源。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+Windows 输出 `release/ResearchMind-Setup-1.7.9-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布。执行 `npm run release:public` 可完成检查、安装包构建、网页构建及公开发行；凭据从当前 GitHub 登录读取，不写入文件。公开上传严格限制为 EXE/APK、使用说明及网页构建资源。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
 
 安装包不包含个人知识库，但包含运行所需的程序资源。不公开源码仓库不等于程序不可逆向；不要承诺 EXE 无法被提取或绝对源码保密。
 

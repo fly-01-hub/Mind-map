@@ -10,6 +10,8 @@ let lastDocuments: MindMapDocument[] | undefined
 let lastFolders: FolderData[] | undefined
 const lastSnapshotAt = new Map<string, number>()
 let flushQueue: Promise<void> = Promise.resolve()
+let persistedDocuments = new Map<string, MindMapDocument>()
+let persistedFolders: FolderData[] | undefined
 
 export function flushLocalPersistence() {
   if (saveTimer) {
@@ -18,11 +20,14 @@ export function flushLocalPersistence() {
   }
   const pending = flushQueue.catch(() => undefined).then(async () => {
     const latest = useDocumentStore.getState()
+    const changedDocuments = latest.documents.filter((document) => persistedDocuments.get(document.id) !== document)
     await Promise.all([
-      documentRepository.saveDocuments(latest.documents),
-      documentRepository.saveFolders(latest.folders),
+      changedDocuments.length ? documentRepository.saveDocuments(changedDocuments) : undefined,
+      latest.folders !== persistedFolders ? documentRepository.saveFolders(latest.folders) : undefined,
     ])
-    await createIntervalSnapshots(latest.documents)
+    await createIntervalSnapshots(changedDocuments)
+    persistedDocuments = new Map(latest.documents.map((document) => [document.id, document]))
+    persistedFolders = latest.folders
     // A newer edit queued during this save still needs to show as unsaved.
     if (useDocumentStore.getState().documents === latest.documents && useDocumentStore.getState().folders === latest.folders) useSaveStore.getState().markLocal()
   })
@@ -40,6 +45,8 @@ export async function initializeLocalPersistence() {
   useDocumentStore.getState().hydrate(documents, folders)
   lastDocuments = documents
   lastFolders = folders
+  persistedDocuments = new Map(documents.map((document) => [document.id, document]))
+  persistedFolders = folders
 
   unsubscribe?.()
   unsubscribe = useDocumentStore.subscribe((state) => {

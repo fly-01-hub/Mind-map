@@ -69,7 +69,9 @@ export interface DocumentState {
 }
 
 const clone = (node: NodeData): NodeData => structuredClone(node)
-const snapshot = (document: MindMapDocument): DocumentSnapshot => structuredClone({
+// Store trees are immutable. History shares untouched branches; mutable engine,
+// import and clipboard data are copied at their boundaries instead.
+const snapshot = (document: MindMapDocument): DocumentSnapshot => ({
   root: document.root,
   arrows: document.arrows ?? [],
   summaries: document.summaries ?? [],
@@ -90,7 +92,7 @@ function updateActive(
   if (title !== current.title && matchingDocuments(state.documents, title).some((item) => item.id !== current.id)) {
     return { nameError: `文档「${title}」已存在，请使用其他名称。` }
   }
-  next = { ...next, title, root: { ...next.root, title } }
+  next = { ...next, title, root: next.root.title === title ? next.root : { ...next.root, title } }
   const histories = { ...state.histories }
   if (recordHistory) {
     const history = histories[id] ?? { past: [], future: [] }
@@ -288,11 +290,13 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const ids = new Set(nodeIds)
     const update = (node: NodeData): NodeData => {
       const nextPatch = ids.has(node.id) ? (typeof patch === 'function' ? patch(node) : patch) : undefined
+      const children = node.children.map(update)
+      if (!nextPatch && children.every((child, index) => child === node.children[index])) return node
       return {
         ...node,
         ...nextPatch,
         updatedAt: nextPatch ? new Date().toISOString() : node.updatedAt,
-        children: node.children.map(update),
+        children,
       }
     }
     return withRoot(document, update(document.root))
@@ -390,7 +394,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     useSaveStore.getState().markLocal()
     return {
       documents: renamedDocuments(state.documents, document, {
-        ...withRoot(document, { ...clone(previous.root), title }), title, arrows: structuredClone(previous.arrows), summaries: structuredClone(previous.summaries),
+        ...withRoot(document, previous.root.title === title ? previous.root : { ...previous.root, title }), title, arrows: previous.arrows, summaries: previous.summaries,
       }),
       histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [snapshot(document), ...history.future] } },
     }
@@ -405,7 +409,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     useSaveStore.getState().markLocal()
     return {
       documents: renamedDocuments(state.documents, document, {
-        ...withRoot(document, { ...clone(next.root), title }), title, arrows: structuredClone(next.arrows), summaries: structuredClone(next.summaries),
+        ...withRoot(document, next.root.title === title ? next.root : { ...next.root, title }), title, arrows: next.arrows, summaries: next.summaries,
       }),
       histories: { ...state.histories, [id]: { past: [...history.past, snapshot(document)], future: history.future.slice(1) } },
     }

@@ -5,7 +5,7 @@
 - 私有源码：`fly-01-hub/Mind-map`，保持 Private。
 - 公开下载与教程：https://github.com/fly-01-hub/Mind-map-download
 - 在线使用：https://fly-01-hub.github.io/Mind-map-download/
-- 公开 main 分支放使用说明和经检查的虚构示例演示素材，gh-pages 分支只放审查后的网页构建资源，Release 只上传指定版本的 EXE。
+- 公开 main 分支放使用说明和经检查的虚构示例演示素材，gh-pages 分支只放审查后的网页构建资源，Release 只上传指定版本的 EXE/APK。
 
 网页在 Pages 子目录下使用 hash 路由。默认本机/PWA、Windows、安卓仍使用原有路由、来源与资料空间。网页版采用独立的浏览器资料空间；各用户资料不上传 GitHub，不自动同步。用完整 `.researchmind` 备份迁移，恢复会整体替换目标库。
 
@@ -30,6 +30,8 @@ npm run release:public
 ```powershell
 node scripts/publish-public.mjs --prepare
 ```
+
+同时发布安卓 APK 时，先执行 `npm run android:build` 并验证签名、版本和包内资源；准备命令使用 `node scripts/publish-public.mjs --prepare --with-android`，发布使用 `node scripts/publish-public.mjs --publish --with-android`。两种安装包在同一草稿中上传、核对大小与 SHA-256 后才公开；公开指南的安卓段落独立替换，避免沿用旧版本名或旧校验值。
 
 准备产物在 `release/public-<version>.md` 和 `release/public-<version>-manifest.json`。查看远端发布和 Pages 构建状态：
 

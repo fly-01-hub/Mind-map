@@ -149,13 +149,13 @@ export function MapEditorPage() {
   const summaryAvailable = Boolean(document && canCreateSummary(document.root, selectedNodeIds))
   const unavailableMoveTargetIds = useMemo(() => {
     const unavailable = new Set<string>()
-    if (!document) return unavailable
+    if (!document || !movePickerOpen) return unavailable
     for (const nodeId of selectedNodeIds) {
       const node = findNode(document.root, nodeId)
       if (node) flattenNodes(node).forEach((item) => unavailable.add(item.id))
     }
     return unavailable
-  }, [document, selectedNodeIds])
+  }, [document, movePickerOpen, selectedNodeIds])
   const breadcrumbs = document && focusRootId ? getBreadcrumbs(document.root, focusRootId) : []
   const searchResults = useMemo(() => document ? searchDocuments([document], searchQuery) : [], [document, searchQuery])
   const markdownPaperSources = useMemo(() => {

@@ -99,6 +99,7 @@ export function clearWikiEditor(element: HTMLElement) {
 export function decorateWikiLinks(html: string, documents: MindMapDocument[]): string {
   const container = document.createElement('div')
   container.innerHTML = sanitizeRichText(html)
+  if (!container.textContent?.includes('[[')) return container.innerHTML
   const links = wikiLinkRanges(container)
   const { parts } = textParts(container)
   // Each styled text fragment gets a wrapper, preserving all existing formatting.
@@ -156,7 +157,7 @@ export function findBacklinks(documents: MindMapDocument[], target: MindMapDocum
   for (const source of documents) {
     if (source.deletedAt) continue
     const visit = (node: NodeData) => {
-      const titleLinks = node.richText && typeof document !== 'undefined'
+      const titleLinks = node.richText && node.title.includes('[[') && typeof document !== 'undefined'
         ? (() => { const element = document.createElement('div'); element.innerHTML = sanitizeRichText(node.richText!); return wikiLinkRanges(element) })()
         : parseWikiLinks(node.title)
       const titleMatch = titleLinks.some((link) => names.has(documentNameKey(link.name)))
