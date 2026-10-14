@@ -16,6 +16,7 @@ import { useUserStore } from '../../stores/userStore'
 import type { Attachment, NodeData, TaskStatus } from '../../types/mindmap'
 import { AttachmentViewer } from './AttachmentViewer'
 import { rehypeWikiLinks } from '../documentLinks/rehypeWikiLinks'
+import { findNode } from '../../utils/tree'
 import 'katex/dist/katex.min.css'
 
 const colors = ['#ffffff', '#edf3ee', '#eef1f5', '#f6f0e8', '#f3ebef', '#f5eeee']
@@ -58,6 +59,7 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest, onOpe
   const [tagDraft, setTagDraft] = useState('')
   const [preview, setPreview] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<Attachment>()
+  const [attachmentError, setAttachmentError] = useState('')
   const [selectedPaperId, setSelectedPaperId] = useState('')
   const userId = useUserStore((state) => state.id) ?? 'local-demo-user'
   const papers = usePaperStore((state) => state.papers)
@@ -115,17 +117,23 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest, onOpe
     setTagDraft('')
   }
   const addAttachments = async (files: FileList | File[]) => {
-    const saved: Attachment[] = []
-    try {
-      for (const file of Array.from(files)) {
+    setAttachmentError('')
+    const failed: string[] = []
+    for (const file of Array.from(files)) {
+      try {
         if (isPdfFile(file)) await uploadAndLink(file, documentId, node.id, userId)
-        else saved.push(await attachmentRepository.save(documentId, node.id, file))
+        else {
+          const saved = await attachmentRepository.save(documentId, node.id, file)
+          const current = useDocumentStore.getState().documents.find((item) => item.id === documentId && !item.deletedAt)
+          const target = current && findNode(current.root, node.id)
+          if (!target) throw new Error('目标节点已被删除')
+          useDocumentStore.getState().updateDocumentNode(documentId, node.id, { attachments: [...target.attachments, saved] })
+        }
+      } catch {
+        failed.push(file.name)
       }
-    } catch {
-      return
     }
-    if (!saved.length) return
-    patch({ attachments: [...node.attachments, ...saved] })
+    if (failed.length) setAttachmentError(`这些文件未能添加，请检查设备空间后重试：${failed.join('、')}。其他已成功添加的附件会保留。`)
   }
   const addPapers = async (files: FileList | File[]) => {
     try {
@@ -135,12 +143,16 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest, onOpe
     }
   }
   const removeAttachment = async (attachment: Attachment) => {
-    await attachmentRepository.softDelete(attachment.id)
-    patch({ attachments: node.attachments.filter((item) => item.id !== attachment.id) })
+    try {
+      await attachmentRepository.softDelete(attachment.id)
+      const current = useDocumentStore.getState().documents.find((item) => item.id === documentId && !item.deletedAt)
+      const target = current && findNode(current.root, node.id)
+      if (target) useDocumentStore.getState().updateDocumentNode(documentId, node.id, { attachments: target.attachments.filter((item) => item.id !== attachment.id) })
+    } catch { setAttachmentError('附件删除失败，请稍后重试。') }
   }
 
   return (
-    <aside className="node-inspector">
+    <aside className="node-inspector" data-document-id={documentId} data-node-id={node.id}>
       <header><div><p className="eyebrow">节点详情</p><strong>{node.title}</strong></div><button className="icon-button" onClick={close} aria-label="关闭详情"><X size={18} /></button></header>
       <div className="inspector-scroll">
         <section className="inspector-block">
@@ -230,6 +242,7 @@ export function NodeInspector({ node, documentId, close, focusNoteRequest, onOpe
           <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { if (event.target.files) void addAttachments(event.target.files); event.target.value = '' }} />
           <div className="attachment-list">{node.attachments.map((attachment) => <div key={attachment.id} className="attachment-row"><button className="attachment-open" onClick={() => setViewerAttachment(attachment)}>{attachmentIcon(attachment)}<span><strong>{attachment.fileName}</strong><small>{(attachment.size / 1024).toFixed(1)} KB</small></span></button><button className="icon-button" aria-label={`删除附件 ${attachment.fileName}`} onClick={() => void removeAttachment(attachment)}><Trash2 size={14} /></button></div>)}</div>
           {!node.attachments.length && <button className="attachment-drop" onClick={() => fileInputRef.current?.click()}><Paperclip size={17} /><span>添加图片或其他文件</span></button>}
+          {attachmentError && <p className="paper-error" role="alert">{attachmentError}</p>}
         </section>
       </div>
       <AttachmentViewer attachment={viewerAttachment} onClose={() => setViewerAttachment(undefined)} />

@@ -42,6 +42,7 @@ interface LocalBackupPayload {
   version: typeof BACKUP_VERSION
   exportedAt: string
   tables: BackupTables
+  integrity?: { algorithm: 'SHA-256'; digest: string }
 }
 
 export interface BackupFile {
@@ -80,6 +81,12 @@ function deserializeBlob(value: SerializedBlob) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+async function backupDigest(payload: Pick<LocalBackupPayload, 'format' | 'version' | 'exportedAt' | 'tables'>) {
+  const bytes = new TextEncoder().encode(JSON.stringify({ format: payload.format, version: payload.version, exportedAt: payload.exportedAt, tables: payload.tables }))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function parseBackup(text: string): LocalBackupPayload {
@@ -174,6 +181,7 @@ async function backupFromRows(rows: LocalRows): Promise<BackupFile> {
     exportedAt,
     tables: { ...rows, attachmentBlobs, paperFiles },
   }
+  payload.integrity = { algorithm: 'SHA-256', digest: await backupDigest(payload) }
   const itemCount = Object.values(payload.tables).reduce((total, table) => total + table.length, 0)
   return {
     blob: new Blob([JSON.stringify(payload)], { type: 'application/json' }),
@@ -185,6 +193,9 @@ async function backupFromRows(rows: LocalRows): Promise<BackupFile> {
 
 export async function restoreLocalBackup(file: Blob) {
   const payload = parseBackup(await file.text())
+  if (payload.integrity && (payload.integrity.algorithm !== 'SHA-256' || payload.integrity.digest !== await backupDigest(payload))) {
+    throw new Error('备份完整性校验失败，文件可能损坏或已被修改；原有资料未被替换。请使用其他备份文件。')
+  }
   const attachmentBlobs: StoredAttachmentBlob[] = payload.tables.attachmentBlobs.map(({ blob, ...row }) => ({
     ...row,
     blob: deserializeBlob(blob),
@@ -262,6 +273,6 @@ export async function saveBackupFile(backup: BackupFile) {
   anchor.href = url
   anchor.download = backup.fileName
   anchor.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   return 'downloaded' as const
 }

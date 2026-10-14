@@ -5,7 +5,9 @@ import { useSaveStore } from '../../stores/saveStore'
 import { usePaperStore } from '../../stores/paperStore'
 import { useDataSafetyStore } from '../../stores/dataSafetyStore'
 import { planRecovery, RecoveryJournal, type EditorDraft } from './recoveryJournal'
-import { readEditorDraft } from './editorDraft'
+import { draftKey, isDraftCommitted, readEditorDraft } from './editorDraft'
+import { useSelectionStore } from '../../stores/selectionStore'
+import { findNode } from '../../utils/tree'
 
 let unsubscribe: (() => void) | undefined
 let saveTimer: number | undefined
@@ -16,16 +18,18 @@ let flushQueue: Promise<void> = Promise.resolve()
 let persistedDocuments = new Map<string, MindMapDocument>()
 let persistedFolders: FolderData[] | undefined
 let journal: RecoveryJournal | undefined
-let draft: EditorDraft | undefined
+const drafts = new Map<string, EditorDraft>()
+let committingDrafts = false
 let suspended = false
 let installed = false
 let writer: Promise<void> | undefined
 
 function writeJournal() {
+  for (const [key, draft] of drafts) if (isDraftCommitted(draft)) drafts.delete(key)
   if (!journal || suspended) return
   try {
     const latest = useDocumentStore.getState()
-    journal.write(latest.documents, latest.folders, persistedDocuments, persistedFolders, draft ? [draft] : [])
+    journal.write(latest.documents, latest.folders, persistedDocuments, persistedFolders, [...drafts.values()])
     useDataSafetyStore.setState({ journalError: undefined })
   } catch {
     useDataSafetyStore.setState({ journalError: '草稿暂存失败。请保持此窗口打开，并尽快导出完整备份。' })
@@ -34,7 +38,23 @@ function writeJournal() {
 
 function needsSave() {
   const state = useDocumentStore.getState()
-  return Boolean(draft || state.folders !== persistedFolders || state.documents.some((document) => persistedDocuments.get(document.id) !== document))
+  return Boolean(drafts.size || state.folders !== persistedFolders || state.documents.some((document) => persistedDocuments.get(document.id) !== document))
+}
+
+function commitEditorDrafts() {
+  if (suspended || committingDrafts) return
+  committingDrafts = true
+  try {
+    for (const draft of [...drafts.values()]) {
+      if (isDraftCommitted(draft)) continue
+      const document = useDocumentStore.getState().documents.find((item) => item.id === draft.documentId && !item.deletedAt)
+      if (!document || !findNode(document.root, draft.nodeId)) continue // Retain orphaned edits in the journal for recovery.
+      const patch = { ...draft.patch }
+      for (const field of draft.clearFields ?? []) Object.assign(patch, { [field]: undefined })
+      useDocumentStore.getState().updateDocumentNode(document.id, draft.nodeId, patch)
+    }
+  } finally { committingDrafts = false }
+  writeJournal()
 }
 
 function scheduleRetry() {
@@ -76,7 +96,12 @@ export async function prepareForNavigation() {
   if (!useDocumentStore.getState().hydrated || suspended) return
   if (globalThis.document.activeElement instanceof HTMLElement) globalThis.document.activeElement.blur()
   await Promise.resolve()
+  commitEditorDrafts()
   await flushLocalPersistence()
+  if (drafts.size) {
+    useSaveStore.getState().setStatus('error')
+    throw new Error('仍有未能提交的草稿。请先导出恢复记录，当前页面不会自动关闭或替换资料。')
+  }
 }
 
 function acquireWriter() {
@@ -96,6 +121,7 @@ function acquireWriter() {
 function subscribeToChanges() {
   unsubscribe?.()
   unsubscribe = useDocumentStore.subscribe((state, previous) => {
+    if (state.activeDocumentId !== previous.activeDocumentId) commitEditorDrafts()
     if (suspended || !state.hydrated || (state.documents === previous.documents && state.folders === previous.folders)) return
     writeJournal()
     if (useSaveStore.getState().status !== 'error') useSaveStore.getState().markSaving()
@@ -111,19 +137,25 @@ function installLifecycleProtection() {
   document.addEventListener('input', (event) => {
     const next = readEditorDraft(event.target)
     if (!next || suspended) return
-    draft = next
+    drafts.set(draftKey(next), next)
     writeJournal()
     if (useSaveStore.getState().status !== 'error') useSaveStore.getState().markSaving()
   }) // After React's delegated onChange, so controlled inputs keep their value.
   document.addEventListener('blur', (event) => {
-    if (!readEditorDraft(event.target)) return
-    const previous = draft
+    const current = readEditorDraft(event.target)
+    if (!current) return
+    if (event.target instanceof HTMLElement && event.target.dataset.draftCancelled === 'true') {
+      drafts.delete(draftKey(current))
+      delete event.target.dataset.draftCancelled
+    }
     queueMicrotask(() => {
-      if (draft === previous && !useDocumentStore.getState().nameError) draft = undefined
       writeJournal()
       if (!needsSave()) useSaveStore.getState().markLocal()
     })
   }, true)
+  useSelectionStore.subscribe((state, previous) => {
+    if (state.selectedNodeId !== previous.selectedNodeId) commitEditorDrafts()
+  })
   const leaving = () => { void prepareForNavigation().catch(() => undefined) }
   window.addEventListener('pagehide', leaving)
   window.addEventListener('researchmind:pause', leaving)
@@ -186,7 +218,7 @@ export async function replaceLocalKnowledgeBase<T>(operation: () => Promise<T>) 
     const [documents, folders] = await Promise.all([documentRepository.loadDocuments(), documentRepository.loadFolders(), usePaperStore.getState().hydrate()])
     persistedDocuments = new Map(documents.map((document) => [document.id, document]))
     persistedFolders = folders
-    draft = undefined
+    drafts.clear()
     useDocumentStore.setState({ documents, folders, histories: {}, activeDocumentId: undefined })
     hydrated = true
     return result

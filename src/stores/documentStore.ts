@@ -54,6 +54,7 @@ export interface DocumentState {
   removeOnly: (nodeId: string) => void
   duplicate: (nodeId: string) => string | undefined
   updateNode: (nodeId: string, patch: Partial<NodeData>) => void
+  updateDocumentNode: (documentId: string, nodeId: string, patch: Partial<NodeData>) => void
   updateMany: (nodeIds: string[], patch: Partial<NodeData> | ((node: NodeData) => Partial<NodeData>)) => void
   addArrow: (fromId: string, toId: string, label?: string) => string | undefined
   addSummary: (nodeIds: string[], label?: string) => string | undefined
@@ -81,8 +82,9 @@ function updateActive(
   state: DocumentState,
   transform: (document: MindMapDocument) => MindMapDocument,
   recordHistory = true,
+  documentId = state.activeDocumentId,
 ): Partial<DocumentState> {
-  const id = state.activeDocumentId
+  const id = documentId
   if (!id) return {}
   const current = state.documents.find((document) => document.id === id)
   if (!current) return {}
@@ -286,6 +288,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
   updateNode: (nodeId, patch) => set((state) => updateActive(state, (document) => withRoot(document,
     mapNode(document.root, nodeId, (node) => ({ ...node, ...patch, updatedAt: new Date().toISOString() }))))),
+  updateDocumentNode: (documentId, nodeId, patch) => set((state) => updateActive(state, (document) => withRoot(document,
+    mapNode(document.root, nodeId, (node) => ({ ...node, ...patch, updatedAt: new Date().toISOString() }))), true, documentId)),
   updateMany: (nodeIds, patch) => set((state) => updateActive(state, (document) => {
     const ids = new Set(nodeIds)
     const update = (node: NodeData): NodeData => {

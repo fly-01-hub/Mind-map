@@ -136,6 +136,7 @@ describe('local backup service', () => {
     await appDatabase.documents.put(original)
     await appDatabase.paperFiles.put({ paperId: 'paper', blob: new Blob(['retained PDF']), cachedAt: now })
     const payload = JSON.parse(await (await createLocalBackup()).blob.text())
+    delete payload.integrity // Exercise compatible v1 input without a digest.
     payload.tables.documents[0].title = 'after restore'
     const input = new Blob([JSON.stringify(payload)])
     await restoreLocalBackup(input)
@@ -151,5 +152,46 @@ describe('local backup service', () => {
       await expect(restoreLocalBackup(input)).rejects.toThrow('原有资料未被替换')
       expect((await appDatabase.documents.get(original.id))?.title).toBe('after restore')
     } finally { spy.mockRestore() }
+  })
+
+  it('detects valid-JSON corruption before modifying any original data', async () => {
+    const root = createNode('protected original')
+    const original = { id: 'integrity-original', title: root.title, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+    await appDatabase.documents.put(original)
+    await appDatabase.paperFiles.put({ paperId: 'binary', blob: new Blob(['original PDF bytes']), cachedAt: root.createdAt })
+    const backup = await createLocalBackup()
+    const payload = JSON.parse(await backup.blob.text())
+    expect(payload.integrity.algorithm).toBe('SHA-256')
+    payload.tables.documents[0].root.note = 'changed but still valid JSON'
+    await expect(restoreLocalBackup(new Blob([JSON.stringify(payload)]))).rejects.toThrow('完整性校验失败')
+    expect(await appDatabase.documents.get(original.id)).toEqual(original)
+    payload.tables.documents[0].root.note = ''
+    payload.tables.paperFiles[0].blob.base64 = btoa('different PDF bytes')
+    await expect(restoreLocalBackup(new Blob([JSON.stringify(payload)]))).rejects.toThrow('完整性校验失败')
+    expect(await (await appDatabase.paperFiles.get('binary'))!.blob.text()).toBe('original PDF bytes')
+    expect(await appDatabase.meta.get('last-restored-at')).toBeUndefined()
+  })
+
+  it('rolls back the actual replacement transaction after clears and writes have started', async () => {
+    const root = createNode('transaction original')
+    const original = { id: 'rollback-original', title: root.title, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+    await appDatabase.documents.put(original)
+    await appDatabase.paperFiles.put({ paperId: 'binary', blob: new Blob(['keep binary']), cachedAt: root.createdAt })
+    const backup = await createLocalBackup()
+    const payload = JSON.parse(await backup.blob.text())
+    delete payload.integrity
+    payload.tables.documents[0].root.note = 'must roll back'
+    payload.tables.folders.push({ id: 'fail', name: 'new folder' })
+    const put = IDBObjectStore.prototype.put
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function(this: IDBObjectStore, ...args: Parameters<typeof put>) {
+      if (this.name === 'folders') throw new DOMException('Simulated failure during restore', 'QuotaExceededError')
+      return put.apply(this, args)
+    })
+    try { await expect(restoreLocalBackup(new Blob([JSON.stringify(payload)]))).rejects.toThrow() }
+    finally { spy.mockRestore() }
+    expect(await appDatabase.documents.get(original.id)).toEqual(original)
+    expect(await appDatabase.folders.count()).toBe(0)
+    expect(await (await appDatabase.paperFiles.get('binary'))!.blob.text()).toBe('keep binary')
+    expect(await appDatabase.meta.get('last-restored-at')).toBeUndefined()
   })
 })

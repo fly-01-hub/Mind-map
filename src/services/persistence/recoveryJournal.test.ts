@@ -82,4 +82,62 @@ describe('write-ahead recovery', () => {
     expect(result.documents[0].linkAliases).toContain(original.title)
     expect(result.folders).toEqual([newerFolder])
   })
+
+  it('does not discard pending content when database metadata happens to match', () => {
+    const original = document()
+    const pending = { ...original, version: 2, root: { ...original.root, note: 'pending text' } }
+    const other = { ...pending, root: { ...original.root, note: 'other saved text' } }
+    const storage = memoryStorage()
+    const folders: [] = []
+    new RecoveryJournal(storage).write([pending], folders, new Map([[original.id, original]]), folders, [])
+    const result = planRecovery(storage, [other], folders)
+    expect(result.documents[0]).toEqual(other)
+    expect(result.documents[1]?.root.note).toBe('pending text')
+    expect(result.conflicts).toBe(1)
+  })
+
+  it('recovers removal of an optional node field without requiring other field changes', () => {
+    const original = document()
+    original.root.children[0].code = 'old code'
+    const { code: _removed, ...withoutCode } = original.root.children[0]
+    const pending = { ...original, version: 2, root: { ...original.root, children: [withoutCode, original.root.children[1]] } }
+    const storage = memoryStorage()
+    const folders: [] = []
+    new RecoveryJournal(storage).write([pending], folders, new Map([[original.id, original]]), folders, [])
+    expect(planRecovery(storage, [original], folders).documents[0].root.children[0].code).toBeUndefined()
+  })
+
+  it('retains same-revision database changes instead of overwriting them during recovery', () => {
+    const original = document()
+    const pending = { ...original, version: 2, root: { ...original.root, note: 'pending edit' } }
+    const other = { ...original, root: { ...original.root, note: 'different saved content' } }
+    const storage = memoryStorage()
+    const folders: [] = []
+    new RecoveryJournal(storage).write([pending], folders, new Map([[original.id, original]]), folders, [])
+    const result = planRecovery(storage, [other], folders)
+    expect(result.documents[0]).toEqual(other)
+    expect(result.documents[1]?.root.note).toBe('pending edit')
+  })
+
+  it('recovers multiple node drafts into the same document without creating false conflicts', () => {
+    const original = document()
+    const storage = memoryStorage()
+    const folders: [] = []
+    new RecoveryJournal(storage).write([original], folders, new Map([[original.id, original]]), folders, original.root.children.map((node) => ({ documentId: original.id, nodeId: node.id, version: original.version, patch: { note: 'draft for ' + node.title } })))
+    const result = planRecovery(storage, [original], folders)
+    expect(result.documents).toHaveLength(1)
+    expect(result.documents[0].root.children.map((node) => node.note)).toEqual(['draft for first', 'draft for second'])
+    expect(result.conflicts).toBe(0)
+  })
+
+  it('keeps both values when a focused draft conflicts with same-revision saved content', () => {
+    const original = document()
+    const other = { ...original, root: { ...original.root, note: 'other saved note' } }
+    const storage = memoryStorage()
+    const folders: [] = []
+    new RecoveryJournal(storage).write([original], folders, new Map([[original.id, original]]), folders, [{ documentId: original.id, nodeId: original.root.id, version: original.version, patch: { note: 'unblurred draft' }, baseValues: { note: JSON.stringify(original.root.note) } }])
+    const result = planRecovery(storage, [other], folders)
+    expect(result.documents[0]).toEqual(other)
+    expect(result.documents[1]?.root.note).toBe('unblurred draft')
+  })
 })

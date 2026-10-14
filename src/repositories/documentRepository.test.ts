@@ -57,4 +57,13 @@ describe('document batch persistence', () => {
     await expect(documentRepository.saveWorkspace([{ ...newer, title: 'must roll back' }], [malformed])).rejects.toThrow()
     expect(await appDatabase.documents.get(original.id)).toEqual(newer)
   })
+
+  it('rejects differing saved content even when revision numbers and timestamps match', async () => {
+    const root = createNode('same metadata')
+    const baseline: MindMapDocument = { id: 'same-metadata', title: root.title, root, version: 1, isFavorite: false, createdAt: root.createdAt, updatedAt: root.updatedAt }
+    const other = { ...baseline, root: { ...root, note: 'written elsewhere' } }
+    await appDatabase.documents.put(other)
+    await expect(documentRepository.saveWorkspace([{ ...baseline, version: 2, root: { ...root, note: 'my edit' } }], undefined, { documents: new Map([[baseline.id, baseline]]) })).rejects.toThrow('停止覆盖')
+    expect(await appDatabase.documents.get(baseline.id)).toEqual(other)
+  })
 })

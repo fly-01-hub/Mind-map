@@ -30,11 +30,21 @@ export function sanitizeRichText(html: string): string {
   const template = document.createElement('template')
   template.innerHTML = html
 
+  const serializeChildren = (nodes: NodeListOf<ChildNode>): string => {
+    let result = ''
+    for (const node of nodes) {
+      // Browser contenteditable uses block elements for new lines, including
+      // "first<div>second</div>". Keep the boundary before each block as well.
+      if (node instanceof HTMLElement && ['div', 'p'].includes(node.tagName.toLowerCase()) && result && !result.endsWith('<br>')) result += '<br>'
+      result += serialize(node)
+    }
+    return result
+  }
   const serialize = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent ?? '')
     if (!(node instanceof HTMLElement)) return ''
     if (['script', 'style', 'template', 'iframe', 'object', 'embed'].includes(node.tagName.toLowerCase())) return ''
-    const children = Array.from(node.childNodes).map(serialize).join('')
+    const children = serializeChildren(node.childNodes)
     const tag = node.tagName.toLowerCase()
     if (tag === 'br') return '<br>'
     if (tag === 'b' || tag === 'strong') return `<strong>${children}</strong>`
@@ -64,7 +74,7 @@ export function sanitizeRichText(html: string): string {
     return children
   }
 
-  return Array.from(template.content.childNodes).map(serialize).join('').replace(/(?:<br>)+$/, '')
+  return serializeChildren(template.content.childNodes).replace(/(?:<br>)+$/, '')
 }
 
 export function plainTextFromRichText(html: string): string {

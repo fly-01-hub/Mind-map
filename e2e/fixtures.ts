@@ -12,6 +12,8 @@ export const test = base.extend({
       await appDatabase.documents.bulkPut(documents)
       await appDatabase.folders.bulkPut(folders)
       useDocumentStore.getState().hydrate(documents, folders)
+      const { flushLocalPersistence } = await import('/src/services/persistence/localPersistence.ts')
+      await flushLocalPersistence()
     }, { documents: testDocuments, folders: testFolders })
     await runFixture(page)
   },

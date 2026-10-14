@@ -21,7 +21,7 @@ export const documentRepository = {
       for (const document of documents) {
         const current = await appDatabase.documents.get(document.id)
         const baseline = expected.documents.get(document.id)
-        if (current?.version === baseline?.version && current?.updatedAt === baseline?.updatedAt) continue
+        if (current?.version === baseline?.version && current?.updatedAt === baseline?.updatedAt && JSON.stringify(current) === JSON.stringify(baseline)) continue
         // PDF/annotation transactions can have already committed this exact tree.
         if (current && JSON.stringify(current) === JSON.stringify(document)) continue
         throw new Error('检测到其他窗口更新了资料，已停止覆盖。请导出当前编辑，关闭其他窗口后重新打开。')

@@ -12,6 +12,6 @@ export function DocumentTitleInput({ value, onCommit, ...props }: {
     onKeyDown={(event) => {
       if (event.nativeEvent.isComposing) return
       if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() }
-      if (event.key === 'Escape') { event.preventDefault(); cancelled.current = true; setDraft(value); event.currentTarget.blur() }
+      if (event.key === 'Escape') { event.preventDefault(); cancelled.current = true; event.currentTarget.dataset.draftCancelled = 'true'; setDraft(value); event.currentTarget.blur() }
     }} />
 }

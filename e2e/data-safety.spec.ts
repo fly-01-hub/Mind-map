@@ -13,16 +13,90 @@ async function crashAndReopen(page: Page) {
   return reopened
 }
 
+test('keeps browser-generated line boundaries and formatting in saved rich text', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { compactRichText, plainTextFromRichText, sanitizeRichText } = await import('/src/utils/richText.ts')
+    const plain = sanitizeRichText('first<div>second</div><div>third</div>')
+    const formatted = sanitizeRichText('<strong>first</strong><div><a href="https://example.com">second</a></div>')
+    return { plain, title: plainTextFromRichText(plain), compact: compactRichText(plain, 'first\nsecond\nthird'), formatted, formattedTitle: plainTextFromRichText(formatted) }
+  })
+  expect(result.plain).toBe('first<br>second<br>third')
+  expect(result.title).toBe('first\nsecond\nthird')
+  expect(result.compact).toBeUndefined()
+  expect(result.formatted).toContain('<strong>first</strong><br><a')
+  expect(result.formattedTitle).toBe('first\nsecond')
+})
+
+test('retains notes on both nodes when selection unmounts a focused inspector', async ({ page }) => {
+  await page.goto('/map/test-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await page.locator('.me-root .me-tpc').click()
+  await page.getByRole('button', { name: '节点详情', exact: true }).click()
+  await page.locator('#node-note').fill('First note before switching nodes')
+  // Selection can change before the focused editor receives a browser blur.
+  await page.evaluate(async () => {
+    const { useSelectionStore } = await import('/src/stores/selectionStore.ts')
+    const { useDocumentStore } = await import('/src/stores/documentStore.ts')
+    useSelectionStore.getState().setSelectedNode(useDocumentStore.getState().documents.find((item) => item.id === 'test-map')!.root.children[0].id)
+  })
+  await expect(page.locator('#node-note')).toHaveValue('')
+  await page.locator('#node-note').fill('Second note before crashing')
+  const reopened = await crashAndReopen(page)
+  await reopened.locator('.me-root .me-tpc').click()
+  await reopened.getByRole('button', { name: '节点详情', exact: true }).click()
+  await expect(reopened.locator('#node-note')).toHaveValue('First note before switching nodes')
+  await reopened.locator('.me-tpc').filter({ hasText: /^分支甲项/ }).click()
+  await expect(reopened.locator('#node-note')).toHaveValue('Second note before crashing')
+})
+
+test('preserves successful attachments when a later file in the same upload fails', async ({ page }) => {
+  await page.goto('/map/test-map')
+  await page.getByRole('button', { name: '导图', exact: true }).click()
+  await page.locator('.me-root .me-tpc').click()
+  await page.getByRole('button', { name: '节点详情', exact: true }).click()
+  await page.evaluate(async () => {
+    const { attachmentRepository } = await import('/src/repositories/attachmentRepository.ts')
+    const save = attachmentRepository.save
+    let calls = 0
+    attachmentRepository.save = async (...args) => {
+      if (++calls === 2) throw new DOMException('Simulated quota failure', 'QuotaExceededError')
+      return save(...args)
+    }
+  })
+  await page.locator('.attachments-block input[type=file]').setInputFiles([
+    { name: 'kept-note.txt', mimeType: 'text/plain', buffer: Buffer.from('Retained attachment') },
+    { name: 'failed-note.txt', mimeType: 'text/plain', buffer: Buffer.from('Cannot save') },
+  ])
+  await expect(page.locator('.attachments-block')).toContainText('kept-note.txt')
+  await expect(page.locator('.attachments-block [role=alert]')).toContainText('failed-note.txt')
+  await page.evaluate(async () => { const { prepareForNavigation } = await import('/src/services/persistence/localPersistence.ts'); await prepareForNavigation() })
+  await page.reload()
+  await page.locator('.me-root .me-tpc').click()
+  await page.getByRole('button', { name: '节点详情', exact: true }).click()
+  await expect(page.locator('.attachments-block')).toContainText('kept-note.txt')
+})
+
+test('cancelling a document rename does not replay the cancelled draft after a crash', async ({ page }) => {
+  await page.goto('/map/test-map')
+  const title = page.getByRole('textbox', { name: '文档名称', exact: true })
+  const original = await title.inputValue()
+  await title.fill('Cancelled rename')
+  await title.press('Escape')
+  const reopened = await crashAndReopen(page)
+  await expect(reopened.getByRole('textbox', { name: '文档名称', exact: true })).toHaveValue(original)
+})
+
 test('recovers a map topic from a renderer crash while its editor is still focused', async ({ page }) => {
   await page.goto('/map/test-map')
   await page.getByRole('button', { name: '导图', exact: true }).click()
   const root = page.locator('.me-root .me-tpc')
   await root.dblclick()
-  await page.locator('#input-box[contenteditable]').fill('Typed before a renderer crash')
+  await page.locator('#input-box[contenteditable]').fill('Typed before a renderer crash\nSecond line kept')
   await expect(page.locator('#input-box[contenteditable]')).toBeFocused()
   await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith('researchmind-recovery-v1:') && localStorage.getItem(key)?.includes('Typed before a renderer crash')))).toBe(true)
   const reopened = await crashAndReopen(page)
   await expect(reopened.locator('.me-root .me-tpc')).toContainText('Typed before a renderer crash')
+  await expect(reopened.locator('.me-root .me-tpc > .text')).toHaveText('Typed before a renderer crash\nSecond line kept', { useInnerText: true })
   await expect(reopened.locator('.data-safety-notice')).toContainText('已自动恢复')
   await reopened.reload()
   await expect(reopened.locator('.me-root .me-tpc')).toContainText('Typed before a renderer crash')
@@ -107,6 +181,7 @@ test('restores atomically without an old pending save overwriting it and retains
     state.openDocument(current.id)
     state.updateNode(current.root.id, { note: 'Pending edit retained in pre-restore snapshot' })
     const payload = JSON.parse(await (await createLocalBackup()).blob.text())
+    delete payload.integrity // Build a compatible legacy backup for the replacement scenario.
     payload.tables.documents = [{ ...current, id: 'restored-target', title: 'Restored target', root: { ...current.root, title: 'Restored target' } }]
     await replaceLocalKnowledgeBase(() => restoreLocalBackup(new Blob([JSON.stringify(payload)], { type: 'application/json' })))
     const snapshot = JSON.parse(await (await latestSafetyBackup())!.blob.text())

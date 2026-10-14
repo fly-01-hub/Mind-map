@@ -10,6 +10,7 @@ export interface EditorDraft {
   version: number
   patch: Partial<NodeData>
   clearFields?: Array<keyof NodeData>
+  baseValues?: Record<string, string | null>
 }
 interface DocumentPatch {
   document: Omit<MindMapDocument, 'root'>
@@ -17,6 +18,7 @@ interface DocumentPatch {
   baseVersion?: number
   baseUpdatedAt?: string
   nodes: StoredNode[]
+  base?: { document: Omit<MindMapDocument, 'root'>; rootId: string; nodes: StoredNode[]; absentNodeIds: string[] }
 }
 interface JournalData {
   format: 1
@@ -45,13 +47,27 @@ function makePatch(document: MindMapDocument, previous?: MindMapDocument): Docum
     if (previousNode === node) return
     const { children, ...fields } = node
     const childrenChanged = !previousNode || children.length !== previousNode.children.length || children.some((child, index) => child.id !== previousNode.children[index].id)
-    const fieldsChanged = !previousNode || (Object.keys(fields) as Array<keyof typeof fields>).some((key) => fields[key] !== previousNode[key])
+    const fieldsChanged = !previousNode || [...new Set([...Object.keys(fields), ...Object.keys(previousNode).filter((key) => key !== 'children')])]
+      .some((key) => fields[key as keyof typeof fields] !== previousNode[key as keyof NodeData])
     if (childrenChanged || fieldsChanged) nodes.push({ ...fields, children: childrenChanged ? children.map((child) => child.id) : undefined })
     children.forEach(visit)
   }
   visit(document.root)
   const { root, ...fields } = document
-  return { document: fields, rootId: root.id, baseVersion: previous?.version, baseUpdatedAt: previous?.updatedAt, nodes }
+  let base: DocumentPatch['base']
+  if (previous) {
+    const { root: previousRoot, ...previousFields } = previous
+    const baseNodes: StoredNode[] = []
+    const absentNodeIds: string[] = []
+    for (const node of nodes) {
+      const old = before!.get(node.id)
+      if (!old) { absentNodeIds.push(node.id); continue }
+      const { children, ...oldFields } = old
+      baseNodes.push({ ...oldFields, children: children.map((child) => child.id) })
+    }
+    base = { document: previousFields, rootId: previousRoot.id, nodes: baseNodes, absentNodeIds }
+  }
+  return { document: fields, rootId: root.id, baseVersion: previous?.version, baseUpdatedAt: previous?.updatedAt, nodes, base }
 }
 
 export class RecoveryJournal {
@@ -92,6 +108,19 @@ function rebuild(patch: DocumentPatch, existing?: MindMapDocument) {
   return { ...patch.document, root: build(patch.rootId) }
 }
 
+function matchesPatch(current: MindMapDocument, patch: Pick<DocumentPatch, 'document' | 'rootId' | 'nodes'>) {
+  const { root, ...fields } = current
+  if (root.id !== patch.rootId || JSON.stringify(fields) !== JSON.stringify(patch.document)) return false
+  const nodes = nodeIndex(root)
+  return patch.nodes.every(({ children, ...fields }) => {
+    const node = nodes.get(fields.id)
+    if (!node) return false
+    const { children: currentChildren, ...currentFields } = node
+    return JSON.stringify(currentFields) === JSON.stringify(fields)
+      && (!children || JSON.stringify(currentChildren.map((child) => child.id)) === JSON.stringify(children))
+  })
+}
+
 // Pure recovery plan. Callers commit it atomically, then acknowledge its keys.
 // Newer database data is kept; conflicting edits become a separate document.
 export function planRecovery(storage: Storage, initialDocuments: MindMapDocument[], initialFolders: FolderData[]) {
@@ -106,8 +135,10 @@ export function planRecovery(storage: Storage, initialDocuments: MindMapDocument
     const targets = new Map<string, string>()
     for (const patch of data.documents) {
       const current = documents.find((document) => document.id === patch.document.id)
-      if (current?.version === patch.document.version && current.updatedAt === patch.document.updatedAt) continue
-      const conflict = Boolean(current && (current.version !== patch.baseVersion || current.updatedAt !== patch.baseUpdatedAt))
+      if (current && matchesPatch(current, patch)) continue
+      const conflict = Boolean(current && (patch.base
+        ? !matchesPatch(current, patch.base) || patch.base.absentNodeIds.some((id) => nodeIndex(current.root).has(id))
+        : current.version !== patch.baseVersion || current.updatedAt !== patch.baseUpdatedAt))
       const next = rebuild(patch, current)
       if (conflict) {
         const title = uniqueDocumentName(documents, `${next.title}（恢复副本）`)
@@ -136,7 +167,8 @@ export function planRecovery(storage: Storage, initialDocuments: MindMapDocument
       for (const field of draft.clearFields ?? []) Object.assign(patch, { [field]: undefined })
       const existingNode = findNode(current.root, draft.nodeId)
       if (existingNode && Object.keys(patch).every((key) => JSON.stringify(existingNode[key as keyof NodeData]) === JSON.stringify(patch[key as keyof NodeData]))) continue
-      if (!targets.has(draft.documentId) && current.version > draft.version) {
+      const changedBase = existingNode && draft.baseValues && Object.entries(draft.baseValues).some(([key, value]) => (JSON.stringify(existingNode[key as keyof NodeData]) ?? null) !== value)
+      if (!targets.has(draft.documentId) && (current.version > draft.version || changedBase)) {
         const title = uniqueDocumentName(documents, `${current.title}（草稿恢复）`)
         current = { ...current, id: crypto.randomUUID(), title, linkAliases: undefined, root: { ...current.root, title } }
         documents.push(current)
@@ -155,6 +187,7 @@ export function planRecovery(storage: Storage, initialDocuments: MindMapDocument
       documents[index] = { ...current, title, root: { ...root, title },
         linkAliases: title === current.title ? current.linkAliases : [...new Set([...(current.linkAliases ?? []), current.title])],
         version: current.version + 1, updatedAt: new Date().toISOString() }
+      targets.set(draft.documentId, documents[index].id)
       recovered++
     }
     if (data.folders) {
