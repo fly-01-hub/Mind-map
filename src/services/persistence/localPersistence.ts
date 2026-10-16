@@ -205,8 +205,9 @@ export async function initializeLocalPersistence() {
   installLifecycleProtection()
 }
 
-export async function replaceLocalKnowledgeBase<T>(operation: () => Promise<T>) {
+export async function replaceLocalKnowledgeBase<T>(operation: () => Promise<T>, preserveWorkspace = false) {
   await prepareForNavigation()
+  const previousWorkspace = useDocumentStore.getState()
   suspended = true
   unsubscribe?.()
   if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = undefined }
@@ -219,13 +220,13 @@ export async function replaceLocalKnowledgeBase<T>(operation: () => Promise<T>) 
     persistedDocuments = new Map(documents.map((document) => [document.id, document]))
     persistedFolders = folders
     drafts.clear()
-    useDocumentStore.setState({ documents, folders, histories: {}, activeDocumentId: undefined })
+    useDocumentStore.setState({ documents, folders, histories: preserveWorkspace ? previousWorkspace.histories : {}, activeDocumentId: preserveWorkspace ? previousWorkspace.activeDocumentId : undefined })
     hydrated = true
     return result
   } finally {
     if (committed && !hydrated) {
       useDocumentStore.setState({ hydrated: false })
-      useDataSafetyStore.setState({ startupError: '备份已写入，但重新读取失败。请重新打开应用；为保护恢复结果，已停止写入旧资料。' })
+      useDataSafetyStore.setState({ startupError: '资料已写入，但重新读取失败。请重新打开应用；为保护写入结果，已停止保存旧状态。' })
     } else {
       suspended = false
       writeJournal()

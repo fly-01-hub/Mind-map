@@ -40,6 +40,7 @@ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
 - `src/services/persistence/` 与 `src/repositories/` 负责草稿恢复、冲突检测和本地持久化。不要绕开它们直接改用户数据库。
 - PDF、批注与节点关联见 `docs/PDF_KNOWLEDGE.md`、`src/services/paper/` 和 `src/services/pdf/`。
 - 完整 `.researchmind` 恢复会替换目标知识库，不是增量导入或同步接口。
+- 当前源码新增 `.rmstudy` 文献资料包导入，可新增独立导图与关联 PDF，并按资料包 ID 防止重复添加。格式、限制及服务器生成方式见 [STUDY_PACKAGES.md](STUDY_PACKAGES.md)。已安装的旧客户端需要更新构建才有此入口；这还不是实时任务服务。
 
 不要把笔记本的个人资料、数据库或应用配置目录上传到本仓库。服务器开发和测试使用合成数据及独立临时配置。
 

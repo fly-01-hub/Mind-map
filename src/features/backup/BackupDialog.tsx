@@ -6,10 +6,12 @@ import { prepareForNavigation, replaceLocalKnowledgeBase } from '../../services/
 import { isAndroidApp } from '../../services/platform/androidFiles'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useDataSafetyStore } from '../../stores/dataSafetyStore'
+import { importStudyPackage } from '../../services/backup/studyPackage'
 
 export function BackupDialog() {
   const storageLocation = isAndroidApp() ? '此设备应用' : window.location.protocol === 'app:' ? '此电脑应用' : '当前浏览器'
   const inputRef = useRef<HTMLInputElement>(null)
+  const studyInputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -51,6 +53,21 @@ export function BackupDialog() {
     }
   }
 
+  const importStudy = async (file?: File) => {
+    if (!file) return
+    setBusy(true)
+    setMessage('正在校验 PDF 并新增文献导图，请保持窗口打开…')
+    try {
+      const result = await replaceLocalKnowledgeBase(() => importStudyPackage(file), true)
+      setMessage(result.alreadyImported ? '这份文献资料包已导入，未重复添加。' : `已新增文献导图，关联 ${result.paperCount} 篇 PDF。关闭此窗口后可在知识库中打开；双击论文节点即可阅读。`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '文献资料包导入失败。')
+    } finally {
+      if (studyInputRef.current) studyInputRef.current.value = ''
+      setBusy(false)
+    }
+  }
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -76,6 +93,9 @@ export function BackupDialog() {
             <input ref={inputRef} className="visually-hidden" type="file" accept=".researchmind,application/json" onChange={(event) => void importBackup(event.target.files?.[0])} />
           </div>
           <p className="backup-note">恢复前会自动保留最近两份本机安全副本；这仍不能替代设备之外的完整备份。</p>
+          <button className="secondary-button" disabled={busy} onClick={() => studyInputRef.current?.click()}><Upload size={16} />导入文献资料包</button>
+          <input ref={studyInputRef} className="visually-hidden" type="file" accept=".rmstudy" onChange={event => void importStudy(event.target.files?.[0])} />
+          <p className="backup-note">.rmstudy 资料包会新增独立导图并导入关联 PDF，保留现有资料；重复导入同一资料包不会重复添加。</p>
           {persistent !== undefined && <p className="backup-note">{persistent ? '浏览器已授予持久存储保护，可减少自动回收风险；手动清理站点数据仍会删除资料。' : '浏览器暂未授予持久存储保护，请另存完整备份。'}</p>}
           <button className="secondary-button" disabled={busy} onClick={() => {
             setBusy(true)
