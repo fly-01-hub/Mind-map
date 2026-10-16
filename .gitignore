@@ -42,6 +42,7 @@ android/app/src/main/assets/web/
 *.aab
 *.researchmind
 *.rmstudy
+*.rmpart
 ResearchMind-recovery-records*.json
 # Personal database profiles, attachments and exported mind maps
 IndexedDB/

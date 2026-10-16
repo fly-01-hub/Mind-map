@@ -7,7 +7,8 @@ import Dexie, { type EntityTable } from 'dexie'
 
 const BACKUP_FORMAT = 'researchmind-local-backup'
 const BACKUP_VERSION = 1
-type LocalRows = Awaited<ReturnType<typeof readAllTables>>
+export type LocalRows = Awaited<ReturnType<typeof readAllTables>>
+export type BackupFormat = typeof BACKUP_FORMAT | 'researchmind-partial-backup'
 interface SafetySnapshot { id: string; createdAt: string; rows: LocalRows }
 class SafetyDatabase extends Dexie {
   snapshots!: EntityTable<SafetySnapshot, 'id'>
@@ -23,7 +24,7 @@ interface SerializedBlob {
 type AttachmentBackupRow = Omit<StoredAttachmentBlob, 'blob'> & { blob: SerializedBlob }
 type PaperFileBackupRow = Omit<PaperFileCache, 'blob'> & { blob: SerializedBlob }
 
-interface BackupTables {
+export interface BackupTables {
   documents: MindMapDocument[]
   folders: FolderData[]
   versions: DocumentVersion[]
@@ -38,7 +39,7 @@ interface BackupTables {
 }
 
 interface LocalBackupPayload {
-  format: typeof BACKUP_FORMAT
+  format: BackupFormat
   version: typeof BACKUP_VERSION
   exportedAt: string
   tables: BackupTables
@@ -89,14 +90,14 @@ async function backupDigest(payload: Pick<LocalBackupPayload, 'format' | 'versio
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function parseBackup(text: string): LocalBackupPayload {
+function parseBackup(text: string, formats: BackupFormat[] = [BACKUP_FORMAT]): LocalBackupPayload {
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch {
     throw new Error('无法读取备份文件：文件内容不是有效的 ResearchMind 备份。')
   }
-  if (!isRecord(value) || value.format !== BACKUP_FORMAT || value.version !== BACKUP_VERSION || !isRecord(value.tables)) {
+  if (!isRecord(value) || !formats.includes(value.format as BackupFormat) || value.version !== BACKUP_VERSION || !isRecord(value.tables)) {
     throw new Error('备份文件格式或版本不受支持。')
   }
   const requiredTables: Array<keyof BackupTables> = [
@@ -169,14 +170,14 @@ export async function createLocalBackup(current?: Pick<BackupTables, 'documents'
   return backupFromRows(rows)
 }
 
-async function backupFromRows(rows: LocalRows): Promise<BackupFile> {
+export async function backupFromRows(rows: LocalRows, format: BackupFormat = BACKUP_FORMAT): Promise<BackupFile> {
   const [attachmentBlobs, paperFiles] = await Promise.all([
     Promise.all(rows.attachmentBlobs.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
     Promise.all(rows.paperFiles.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
   ])
   const exportedAt = new Date().toISOString()
   const payload: LocalBackupPayload = {
-    format: BACKUP_FORMAT,
+    format,
     version: BACKUP_VERSION,
     exportedAt,
     tables: { ...rows, attachmentBlobs, paperFiles },
@@ -185,14 +186,15 @@ async function backupFromRows(rows: LocalRows): Promise<BackupFile> {
   const itemCount = Object.values(payload.tables).reduce((total, table) => total + table.length, 0)
   return {
     blob: new Blob([JSON.stringify(payload)], { type: 'application/json' }),
-    fileName: `ResearchMind-backup-${exportedAt.replace(/[:.]/g, '-')}.researchmind`,
+    fileName: format === BACKUP_FORMAT ? `ResearchMind-backup-${exportedAt.replace(/[:.]/g, '-')}.researchmind`
+      : `ResearchMind-selected-${exportedAt.replace(/[:.]/g, '-')}.rmpart`,
     exportedAt,
     itemCount,
   }
 }
 
-export async function restoreLocalBackup(file: Blob) {
-  const payload = parseBackup(await file.text())
+export async function readBackupRows(file: Blob, formats: BackupFormat[] = [BACKUP_FORMAT]) {
+  const payload = parseBackup(await file.text(), formats)
   if (payload.integrity && (payload.integrity.algorithm !== 'SHA-256' || payload.integrity.digest !== await backupDigest(payload))) {
     throw new Error('备份完整性校验失败，文件可能损坏或已被修改；原有资料未被替换。请使用其他备份文件。')
   }
@@ -204,6 +206,13 @@ export async function restoreLocalBackup(file: Blob) {
     ...row,
     blob: deserializeBlob(blob),
   }))
+  if (payload.format === 'researchmind-partial-backup' && !payload.integrity) throw new Error('部分导图备份缺少完整性校验。')
+  return { rows: { ...payload.tables, attachmentBlobs, paperFiles }, exportedAt: payload.exportedAt,
+    sourceId: payload.integrity?.digest ?? await backupDigest(payload) }
+}
+
+export async function restoreLocalBackup(file: Blob) {
+  const { rows: tables, exportedAt } = await readBackupRows(file)
   // Keep a complete independent local snapshot before any destructive write.
   // If storage is full or this fails, abort without touching the current data.
   const rows = await readAllTables()
@@ -219,25 +228,25 @@ export async function restoreLocalBackup(file: Blob) {
   await appDatabase.transaction('rw', appDatabase.tables, async () => {
     await Promise.all(appDatabase.tables.map((table) => table.clear()))
     await Promise.all([
-      appDatabase.documents.bulkPut(payload.tables.documents),
-      appDatabase.folders.bulkPut(payload.tables.folders),
-      appDatabase.versions.bulkPut(payload.tables.versions),
-      appDatabase.attachmentBlobs.bulkPut(attachmentBlobs),
-      appDatabase.papers.bulkPut(payload.tables.papers),
-      appDatabase.paperFiles.bulkPut(paperFiles),
-      appDatabase.paperReadingStates.bulkPut(payload.tables.paperReadingStates),
-      appDatabase.paperAnnotations.bulkPut(payload.tables.paperAnnotations),
-      appDatabase.nodePaperRelations.bulkPut(payload.tables.nodePaperRelations),
-      appDatabase.annotationNodeRelations.bulkPut(payload.tables.annotationNodeRelations),
-      appDatabase.meta.bulkPut(payload.tables.meta),
+      appDatabase.documents.bulkPut(tables.documents),
+      appDatabase.folders.bulkPut(tables.folders),
+      appDatabase.versions.bulkPut(tables.versions),
+      appDatabase.attachmentBlobs.bulkPut(tables.attachmentBlobs),
+      appDatabase.papers.bulkPut(tables.papers),
+      appDatabase.paperFiles.bulkPut(tables.paperFiles),
+      appDatabase.paperReadingStates.bulkPut(tables.paperReadingStates),
+      appDatabase.paperAnnotations.bulkPut(tables.paperAnnotations),
+      appDatabase.nodePaperRelations.bulkPut(tables.nodePaperRelations),
+      appDatabase.annotationNodeRelations.bulkPut(tables.annotationNodeRelations),
+      appDatabase.meta.bulkPut(tables.meta),
     ])
     await appDatabase.meta.put({ key: 'last-restored-at', value: new Date().toISOString() })
   })
 
   return {
-    exportedAt: payload.exportedAt,
-    documentCount: payload.tables.documents.length,
-    paperCount: payload.tables.papers.length,
+    exportedAt,
+    documentCount: tables.documents.length,
+    paperCount: tables.papers.length,
   }
 }
 
@@ -261,7 +270,8 @@ export async function saveBackupFile(backup: BackupFile) {
   if (picker) {
     const handle = await picker({
       suggestedName: backup.fileName,
-      types: [{ description: 'ResearchMind 完整备份', accept: { 'application/json': ['.researchmind'] } }],
+      types: [{ description: backup.fileName.endsWith('.rmpart') ? 'ResearchMind 部分导图备份' : 'ResearchMind 完整备份',
+        accept: { 'application/json': [backup.fileName.endsWith('.rmpart') ? '.rmpart' : '.researchmind'] } }],
     })
     const writable = await handle.createWritable()
     await writable.write(backup.blob)

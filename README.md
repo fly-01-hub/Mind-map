@@ -1,6 +1,6 @@
 # ResearchMind 枝间
 
-本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.11**。
+本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.12**。本次新增功能已构建并更新到本机 Windows 客户端；公开下载发行仍为 1.7.11，未发布 1.7.12 安装包或安卓包。
 
 [免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest) · [服务器 / Harness 接手指南](docs/HARNESS_HANDOFF.md)。各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
 
@@ -47,6 +47,8 @@ PWA 可在支持的浏览器中安装为独立窗口，但本地网页仍需本�
 - `[[文档名称]]` 双向链接、反向引用与定位。
 - PDF 本地导入、阅读、批注和论文节点关联。
 - 完整 `.researchmind` 备份与恢复；Markdown/OPML 等格式导入导出。
+- 勾选一份或多份完整导图，备份为 `.rmpart`，携带相关历史、附件、PDF、批注和阅读进度；从部分或完整备份中选择导图新增导入，保留现有资料。
+- 导入 `.rmstudy` 文献资料包，新增独立导图并关联 PDF。三项入口都在“备份与恢复”中，见 [部分导图备份](docs/PARTIAL_BACKUP.md) 与 [文献资料包格式](docs/STUDY_PACKAGES.md)。
 - 编辑时画布尽量保持位置，只在内容越界时最小平移；“＋”跟随编辑框。
 
 操作细节：[快捷键](docs/SHORTCUTS.md)、[节点按钮](docs/NODE_CONTROLS.md)、[文字颜色](docs/TEXT_COLORS.md)、[节点排序](docs/NODE_ORDER.md)、[画布稳定性](docs/VIEWPORT_STABILITY.md)、[双向链接](docs/DOCUMENT_LINKS.md)、[PDF 知识库](docs/PDF_KNOWLEDGE.md)、[安卓](docs/ANDROID.md)。
@@ -79,7 +81,9 @@ npm run desktop:build
 npm run desktop:test
 ```
 
-Windows 输出 `release/ResearchMind-Setup-1.7.11-x64.exe`。本源码仓库的版本标签触发 GitHub Actions 构建与 Release 发布。另行执行 `npm run release:public` 可完成检查、安装包构建、网页构建及下载仓库发行；凭据从当前 GitHub 登录读取，不写入文件。向下载仓库上传的内容仍限制为 EXE/APK、使用说明及网页构建资源，不镜像推送源码分支、标签或历史。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+Windows 安装包构建目标为 `release/ResearchMind-Setup-1.7.12-x64.exe`；本机本次在 NSIS 临时卸载器执行阶段被 Windows 应用控制阻止，没有生成可发行的 1.7.12 安装包。已保留安全设置，通过更新原安装中的应用资源完成本机升级并验证。后续构建应在允许执行该构建步骤的环境中完成，不得发布失败的临时产物。
+
+本源码仓库的版本标签触发 GitHub Actions 构建与 Release 发布。另行执行 `npm run release:public` 可完成检查、安装包构建、网页构建及下载仓库发行；凭据从当前 GitHub 登录读取，不写入文件。向下载仓库上传的内容仍限制为 EXE/APK、使用说明及网页构建资源，不镜像推送源码分支、标签或历史。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
 
 安装包不包含个人知识库，但包含运行所需的程序资源。源码公开也不会公开各用户保存在设备中的资料。
 

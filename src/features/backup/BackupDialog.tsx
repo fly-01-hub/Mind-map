@@ -7,6 +7,7 @@ import { isAndroidApp } from '../../services/platform/androidFiles'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useDataSafetyStore } from '../../stores/dataSafetyStore'
 import { importStudyPackage } from '../../services/backup/studyPackage'
+import { PartialMapBackup } from './PartialMapBackup'
 
 export function BackupDialog() {
   const storageLocation = isAndroidApp() ? '此设备应用' : window.location.protocol === 'app:' ? '此电脑应用' : '当前浏览器'
@@ -69,7 +70,7 @@ export function BackupDialog() {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={next => { if (!busy) setOpen(next) }}>
       <Dialog.Trigger asChild>
         <button className="secondary-button"><HardDrive size={16} />备份与恢复</button>
       </Dialog.Trigger>
@@ -78,7 +79,7 @@ export function BackupDialog() {
         <Dialog.Content className="standard-dialog backup-dialog">
           <header>
             <div><p className="eyebrow">本地资料保护</p><Dialog.Title>备份与恢复</Dialog.Title></div>
-            <Dialog.Close asChild><button className="icon-button" aria-label="关闭"><X size={18} /></button></Dialog.Close>
+            <Dialog.Close asChild><button className="icon-button" disabled={busy} aria-label="关闭"><X size={18} /></button></Dialog.Close>
           </header>
           <Dialog.Description>
             备份文件包含导图、历史版本、附件、PDF、批注和阅读进度。你可以保存到任意本地文件夹、移动硬盘，或自行选择的同步目录。
@@ -93,6 +94,7 @@ export function BackupDialog() {
             <input ref={inputRef} className="visually-hidden" type="file" accept=".researchmind,application/json" onChange={(event) => void importBackup(event.target.files?.[0])} />
           </div>
           <p className="backup-note">恢复前会自动保留最近两份本机安全副本；这仍不能替代设备之外的完整备份。</p>
+          <PartialMapBackup busy={busy} setBusy={setBusy} setMessage={setMessage} />
           <button className="secondary-button" disabled={busy} onClick={() => studyInputRef.current?.click()}><Upload size={16} />导入文献资料包</button>
           <input ref={studyInputRef} className="visually-hidden" type="file" accept=".rmstudy" onChange={event => void importStudy(event.target.files?.[0])} />
           <p className="backup-note">.rmstudy 资料包会新增独立导图并导入关联 PDF，保留现有资料；重复导入同一资料包不会重复添加。</p>

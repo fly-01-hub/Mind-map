@@ -1,6 +1,6 @@
 # 服务器与 Harness 接手指南
 
-更新日期：2026-10-16。当前应用版本 1.7.11，主数据库 schema v3，完整备份格式 v1。
+更新日期：2026-10-16。当前源码/本机客户端版本 1.7.12，主数据库 schema v3，完整备份格式 v1。公开发行仍为 1.7.11。
 
 ## 获取完整开发工程
 
@@ -41,6 +41,7 @@ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
 - PDF、批注与节点关联见 `docs/PDF_KNOWLEDGE.md`、`src/services/paper/` 和 `src/services/pdf/`。
 - 完整 `.researchmind` 恢复会替换目标知识库，不是增量导入或同步接口。
 - 当前源码新增 `.rmstudy` 文献资料包导入，可新增独立导图与关联 PDF，并按资料包 ID 防止重复添加。格式、限制及服务器生成方式见 [STUDY_PACKAGES.md](STUDY_PACKAGES.md)。已安装的旧客户端需要更新构建才有此入口；这还不是实时任务服务。
+- 1.7.12 增加 `.rmpart` 部分导图备份/导入，也能从完整备份中勾选导图新增导入；不替换现有库，见 [PARTIAL_BACKUP.md](PARTIAL_BACKUP.md)。
 
 不要把笔记本的个人资料、数据库或应用配置目录上传到本仓库。服务器开发和测试使用合成数据及独立临时配置。
 
