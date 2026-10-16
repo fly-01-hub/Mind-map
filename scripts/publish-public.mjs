@@ -55,8 +55,8 @@ async function api(endpoint, method = 'GET', body, allowed = []) {
 // Verify the real remote access boundary before every publication.
 const source = (await api(`/repos/${owner}/${sourceRepo}`)).data
 const target = (await api(`/repos/${repository}`)).data
-if (source.private !== true || target.private !== false || !target.permissions?.push) {
-  throw new Error('Expected a private source repository and a writable public download repository')
+if (source.full_name !== `${owner}/${sourceRepo}` || source.private !== false || target.full_name !== repository || target.private !== false || !target.permissions?.push) {
+  throw new Error('Expected the public source repository and a separate writable public download repository')
 }
 
 if (mode === '--status') {
@@ -97,9 +97,9 @@ if (includeAndroid) {
 }
 const performanceNotes = '大型导图优化：常见新增、改字与折叠按变化更新，减少重复渲染；撤销记录共享未改变的分支；自动保存仅写入发生变化的文档。复杂结构编辑保留完整刷新。实际速度受设备、可见节点和图片数量影响。'
 const safetyNotes = '本地资料保护：节点、大纲和详情笔记分别保留未提交草稿，切换节点先提交原笔记；关闭、切后台和网页更新前尝试保存，失败自动重试并提供资料与恢复记录导出。读取失败停止编辑，不将原库当成空白覆盖。多窗口协调写入并核对实际内容，冲突保留恢复副本；批量附件部分失败仍保留成功文件。新完整备份加入 SHA-256 完整性校验，兼容旧 v1 备份，恢复前保留最近两份本机安全副本。浏览器清理、卸载或设备损坏仍需独立的完整备份防护，不能保证零丢失。'
-const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码仓库保持私有。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- ${safetyNotes}\n- ${performanceNotes}\n- 保留 PDF 上下连续阅读、双击文献节点分栏、选中后显示一组节点加减按钮。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n${androidSection}资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名。\n\n仅公开运行所需的构建资源；不公开原始工程、开发历史、个人资料或凭据。不承诺程序无法被逆向分析。\n`
+const notes = `# ResearchMind 枝间 ${version}\n\n免费使用，源码见 https://github.com/fly-01-hub/Mind-map 。\n\n- [在线使用网页版](${siteUrl})\n- [下载 Windows x64 安装包](${downloadUrl})\n- ${safetyNotes}\n- ${performanceNotes}\n- 保留 PDF 上下连续阅读、双击文献节点分栏、选中后显示一组节点加减按钮。\n\n安装包：${installerName}\n大小：${size} 字节\nSHA-256：${hash}\n\n${androidSection}资料保存在各自设备或浏览器中，不会上传到 GitHub，不会自动跨设备同步。升级前请创建完整备份并关闭旧版；正常升级保留已有资料。网页版与桌面版资料空间独立，可用完整 .researchmind 备份迁移。安装包未提供可信商业代码签名。\n\n本下载仓库提供运行资源；原始工程与开发历史在独立源码仓库公开。个人资料和凭据不得上传。不承诺程序无法被逆向分析。\n`
 fs.writeFileSync(notesPath, notes)
-fs.writeFileSync(manifestPath, JSON.stringify({ version, sourcePrivate: true, repository, siteUrl, installerName, size, sha256: hash, assets: assets.map(({ name, size, hash }) => ({ name, size, sha256: hash })), pagesFiles: files }, null, 2))
+fs.writeFileSync(manifestPath, JSON.stringify({ version, sourcePrivate: source.private, repository, siteUrl, installerName, size, sha256: hash, assets: assets.map(({ name, size, hash }) => ({ name, size, sha256: hash })), pagesFiles: files }, null, 2))
 console.log(JSON.stringify({ ready: true, version, installerName, size, sha256: hash, pagesFiles: files.length, siteUrl }))
 if (mode === '--prepare') process.exit(0)
 
@@ -188,7 +188,7 @@ if (/## 数据保护\n/.test(readme)) readme = readme.replace(/## 数据保护\n
 else readme = readme.replace('## 保存、完整备份与恢复', `## 数据保护\n\n${safetyNotes}\n\n## 保存、完整备份与恢复`)
 readme = readme.replace('在思维导图中双击节点编辑文字，选中节点后按', '在思维导图中双击普通节点编辑文字；PDF 文献节点单击选中、双击打开分栏。选中节点后显示加减按钮，按')
 if (!readme.includes('连续滚动阅读')) readme = readme.replace('## 保存、完整备份与恢复', 'PDF 支持上下连续滚动阅读，独立阅读与导图分栏均可使用。顶部页码跟随滚动，仍可输入页码或用上一页/下一页跳转；关闭后恢复页码和页内位置。长文献只渲染视口附近的页面。\n\n## 保存、完整备份与恢复')
-readme = readme.replace('公开仓库的文件和提交历史只有说明文档', '公开仓库的 main 分支提供说明文档，gh-pages 分支提供网页构建资源；均不包含原始开发工程或私有源码历史')
+readme = readme.replace('公开仓库的文件和提交历史只有说明文档', '公开仓库的 main 分支提供说明文档，gh-pages 分支提供网页构建资源；均不包含原始开发工程或源码仓库历史')
 readme = readme.replace('后续公开更新仍仅上传经核验的安装包和说明', '后续公开更新仅上传经核验的安装包、说明及网页构建资源')
 if (!readme.includes(siteUrl)) readme = readme.replace('## 下载安装', `## 在线使用（免费）\n\n[打开网页版](${siteUrl})。无需安装或启动本机服务器，支持浏览器中的 PWA 安装；首次在线加载后可离线使用已缓存功能。资料保存在各自浏览器，浏览器清理数据可能导致资料丢失，请定期导出完整备份。网页版与桌面版本的资料不会自动同步。\n\n## 下载安装`)
 if (readme !== Buffer.from(currentReadme.content, 'base64').toString('utf8')) await api(`/repos/${repository}/contents/README.md`, 'PUT', { message: `Document ResearchMind ${version} downloads and free web app`, content: Buffer.from(readme).toString('base64'), sha: currentReadme.sha, branch: target.default_branch })

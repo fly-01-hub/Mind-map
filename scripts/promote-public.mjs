@@ -28,7 +28,7 @@ async function api(endpoint, method = 'GET', body) {
 const [source, target] = await Promise.all([
   api('/repos/fly-01-hub/Mind-map'), api(`/repos/${repo}`),
 ])
-if (source.private !== true || target.private !== false || !target.permissions?.push) throw new Error('Expected private source and writable public distribution repository')
+if (source.full_name !== 'fly-01-hub/Mind-map' || source.private !== false || target.full_name !== repo || target.private !== false || !target.permissions?.push) throw new Error('Expected the public source repository and a separate writable public distribution repository')
 
 if (mode === '--inspect') {
   const endpoints = { views: 'traffic/views', referrers: 'traffic/popular/referrers', paths: 'traffic/popular/paths', releases: 'releases?per_page=100' }

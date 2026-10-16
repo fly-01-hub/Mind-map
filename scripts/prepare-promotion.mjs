@@ -40,7 +40,7 @@ const intro = `# ResearchMind 枝间 · 免费 PDF 阅读与思维导图
 
 欢迎试用并通过 Issues 提出建议。如果它对你有帮助，可以 Star 收藏或分享给有同样需求的人。
 
-本项目免费分发，源码保持私有。本仓库提供使用说明、演示素材、Windows 安装包入口，以及 gh-pages 分支中的网页运行资源。
+本项目免费分发，源码已公开：https://github.com/fly-01-hub/Mind-map。本仓库提供使用说明、演示素材、Windows 安装包入口，以及 gh-pages 分支中的网页运行资源。
 
 `;
 fs.writeFileSync(path.join(staging, 'README.md'), intro + tutorial)
@@ -68,7 +68,7 @@ ResearchMind 枝间是一款免费使用的 PDF 阅读与思维导图工具。
 网页版：https://fly-01-hub.github.io/Mind-map-download/
 Windows 安装包与问题反馈：https://github.com/fly-01-hub/Mind-map-download
 资料保存在当前设备；不同浏览器、网页版与桌面版不自动同步，可用完整备份迁移。
-首次在线加载缓存后，网页版可离线使用。项目免费分发，源码保持私有。
+首次在线加载缓存后，网页版可离线使用。项目免费分发，源码已公开：https://github.com/fly-01-hub/Mind-map。
 关键词：思维导图、PDF阅读、论文阅读、学习笔记、知识管理
 
 【知乎介绍】
@@ -81,7 +81,7 @@ Windows 安装包与问题反馈：https://github.com/fly-01-hub/Mind-map-downlo
 工具免费使用，无需注册或配置付费 API，提供网页版和 Windows 安装包。资料保存在当前设备，不自动跨设备同步。
 在线体验：https://fly-01-hub.github.io/Mind-map-download/
 下载与反馈：https://github.com/fly-01-hub/Mind-map-download
-欢迎试用并反馈你的使用体验。本文介绍的软件由我制作；项目免费分发，源码保持私有。
+欢迎试用并反馈你的使用体验。本文介绍的软件由我制作；项目免费分发，源码已公开：https://github.com/fly-01-hub/Mind-map。
 
 【30 秒视频步骤】
 开场：ResearchMind 枝间，免费 PDF 阅读与思维导图。

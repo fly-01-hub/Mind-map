@@ -2,9 +2,9 @@
 
 本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.11**。
 
-[免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest)。源码保持私有，公开网页只分发构建后的运行资源，各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
+[免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest) · [服务器 / Harness 接手指南](docs/HARNESS_HANDOFF.md)。各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
 
-新对话中的 AI 接手请先完整阅读 [redme.txt](redme.txt)。其中汇总项目结构、数据安全、未提交改动、部署与证书状态、验证记录及待办事项；状态快照整理于 2026-10-12，接手时应重新核对。
+新对话中的 AI 接手请先阅读 [服务器 / Harness 接手指南](docs/HARNESS_HANDOFF.md)，再完整阅读 [redme.txt](redme.txt)。后者包含历次交接快照，接手时应重新核对 Git、进程与部署状态。2026-10-16 起，按仓库所有者的明确决定，源码仓库已公开；旧记录中的私有要求不再适用。
 
 **首次打开是空白知识库**：不预置导图、文件夹、论文、附件或历史记录。已有用户升级不会被清空；只有主动新建或导入备份才会出现内容。无需账号、云数据库或付费 API。
 
@@ -14,7 +14,7 @@ Windows 安装包及面向用户的完整教程见 [公开下载仓库 Mind-map-
 
 安卓平板：[下载 ResearchMind 1.7.11 APK](https://github.com/fly-01-hub/Mind-map-download/releases/download/v1.7.11/ResearchMind-1.7.11-android.apk)，Android 9 及以上。覆盖升级前先导出完整备份，安装与迁移见 [安卓说明](docs/ANDROID.md)。
 
-本源码仓库 `fly-01-hub/Mind-map` **必须保持私有**，不要通过删除当前分支的源码后将其公开：Git 历史和构建记录仍可能泄露源码。公开下载仓库独立维护：main 分支放使用说明与虚构示例的演示素材，Release 放 EXE/APK 附件，gh-pages 分支只放网页构建资源，不共享本仓库的源码或提交历史。Release 的自动 “Source code” ZIP/TAR 对应公开 main 分支的说明和演示；gh-pages 的 ZIP 包含可查看的网页运行资源，均不是原始开发工程。
+本源码仓库 `fly-01-hub/Mind-map` 已公开，可直接克隆到服务器构建和开发。个人导图、论文、数据库、备份、凭据、签名材料和本机配置仍不得提交。下载仓库 `Mind-map-download` 独立维护：main 分支放使用说明与虚构示例的演示素材，Release 放 EXE/APK，gh-pages 分支放网页构建资源；不要将源码分支或历史镜像推送到下载仓库。下载仓库的 “Source code” ZIP/TAR 只对应它自己的分支内容；开发工程请从本仓库获取。
 
 安装前关闭旧版并创建完整备份。未提供可信商业签名，系统可能拦截安装；不要关闭或绕过安全保护。新安装为空白，正常覆盖升级保留原用户数据。其他人不会得到开发者的本地知识库。
 
@@ -79,9 +79,9 @@ npm run desktop:build
 npm run desktop:test
 ```
 
-Windows 输出 `release/ResearchMind-Setup-1.7.11-x64.exe`。本私有仓库的版本标签触发 GitHub Actions 构建与私有 Release 发布。执行 `npm run release:public` 可完成检查、安装包构建、网页构建及公开发行；凭据从当前 GitHub 登录读取，不写入文件。公开上传严格限制为 EXE/APK、使用说明及网页构建资源。不得将本仓库的分支、标签、源码、构建日志或 Git 历史推到公开下载仓库；不要使用镜像推送。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
+Windows 输出 `release/ResearchMind-Setup-1.7.11-x64.exe`。本源码仓库的版本标签触发 GitHub Actions 构建与 Release 发布。另行执行 `npm run release:public` 可完成检查、安装包构建、网页构建及下载仓库发行；凭据从当前 GitHub 登录读取，不写入文件。向下载仓库上传的内容仍限制为 EXE/APK、使用说明及网页构建资源，不镜像推送源码分支、标签或历史。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
 
-安装包不包含个人知识库，但包含运行所需的程序资源。不公开源码仓库不等于程序不可逆向；不要承诺 EXE 无法被提取或绝对源码保密。
+安装包不包含个人知识库，但包含运行所需的程序资源。源码公开也不会公开各用户保存在设备中的资料。
 
 桌面启动/构建命令会先执行 Electron 提供的运行时安装脚本；首次下载需联网。`npm ci` 只安装 Electron 的 npm 包，不保证桌面运行时已下载。
 
