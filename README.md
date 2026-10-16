@@ -1,6 +1,6 @@
 # ResearchMind 枝间
 
-本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.12**。本次新增功能已构建并更新到本机 Windows 客户端；公开下载发行仍为 1.7.11，未发布 1.7.12 安装包或安卓包。
+本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.13**，增加文献资料包内嵌 PNG 图解、段落节点布局及主题阅读缩放。公开下载发行仍为 1.7.11，未发布 1.7.12 或 1.7.13 安装包或安卓包。
 
 [免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest) · [服务器 / Harness 接手指南](docs/HARNESS_HANDOFF.md)。各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
 
@@ -81,7 +81,7 @@ npm run desktop:build
 npm run desktop:test
 ```
 
-Windows 安装包构建目标为 `release/ResearchMind-Setup-1.7.12-x64.exe`；本机本次在 NSIS 临时卸载器执行阶段被 Windows 应用控制阻止，没有生成可发行的 1.7.12 安装包。已保留安全设置，通过更新原安装中的应用资源完成本机升级并验证。后续构建应在允许执行该构建步骤的环境中完成，不得发布失败的临时产物。
+Windows 安装包构建目标为 `release/ResearchMind-Setup-<版本>-x64.exe`。本机在构建1.7.12时，NSIS临时卸载器执行被Windows应用控制阻止，没有生成可发行安装包。1.7.13使用`desktop:unpacked`构建，在确认Electron外壳、依赖及解包运行文件一致后，备份资料并更新原安装中的应用资源，已验证本机客户端。没有关闭安全设置，也没有生成或发布1.7.13安装包。后续安装包应在允许执行所需构建步骤的环境中完成，不得发布失败的临时产物。
 
 本源码仓库的版本标签触发 GitHub Actions 构建与 Release 发布。另行执行 `npm run release:public` 可完成检查、安装包构建、网页构建及下载仓库发行；凭据从当前 GitHub 登录读取，不写入文件。向下载仓库上传的内容仍限制为 EXE/APK、使用说明及网页构建资源，不镜像推送源码分支、标签或历史。安卓需 JDK 17 与 Android SDK，见 [安卓构建说明](docs/ANDROID.md)。
 

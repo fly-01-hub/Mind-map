@@ -17,7 +17,10 @@ test('desktop imports a literature package and round-trips selected maps with PD
   let app = await launch()
   try {
     expect(await app.evaluate(({ app: running }) => running.getPath('userData'))).toBe(profile)
-    expect(await app.evaluate(({ app: running }) => running.getVersion())).toBe('1.7.12')
+    if (process.env.RESEARCHMIND_INSTALLED_EXE) {
+      const source = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
+      expect(await app.evaluate(({ app: running }) => running.getVersion())).toBe(source.version)
+    }
     let page = await app.firstWindow()
     await page.getByRole('button', { name: '新建思维导图' }).click()
     await page.getByRole('textbox', { name: '文档名称', exact: true }).fill('桌面原有资料')

@@ -12,14 +12,30 @@ interface StudyManifest { format: 'researchmind-study'; version: 1; id: string; 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value))
 const text = (value: unknown, maximum: number): value is string => typeof value === 'string' && value.length <= maximum
 
-// Study packages contain a new plaintext tree and PDFs, never replacement DB tables.
-// Rebuild supported node fields so package metadata cannot inject HTML or attachments.
-function readTree(input: unknown, ids = new Map<string, string>(), depth = 0): { root: NodeData; ids: Map<string, string> } {
+// Only embedded raster diagrams are accepted; packages never supply active HTML,
+// remote images, or replacement DB tables. Limit decoded size as well as bytes.
+function readDiagram(input: unknown, budget: { bytes: number }): NonNullable<NodeData['image']> {
+  if (!record(input) || !text(input.url, 6_000_000) || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(input.url)
+    || !Number.isInteger(input.width) || !Number.isInteger(input.height)
+    || Number(input.width) < 1 || Number(input.width) > 960 || Number(input.height) < 1 || Number(input.height) > 1600) throw new Error('文献资料包的图解无效：仅支持限定大小的内嵌 PNG。')
+  let bytes: string
+  try { bytes = atob(input.url.slice('data:image/png;base64,'.length)) } catch { throw new Error('文献资料包的图解编码无效。') }
+  budget.bytes += bytes.length
+  const uint32 = (offset: number) => ((bytes.charCodeAt(offset) * 0x1000000) + (bytes.charCodeAt(offset + 1) << 16) + (bytes.charCodeAt(offset + 2) << 8) + bytes.charCodeAt(offset + 3))
+  const width = uint32(16), height = uint32(20)
+  if (bytes.length < 45 || bytes.length > 4 * 1024 * 1024 || budget.bytes > 32 * 1024 * 1024
+    || bytes.slice(0, 8) !== '\x89PNG\r\n\x1a\n' || uint32(8) !== 13 || bytes.slice(12, 16) !== 'IHDR'
+    || bytes.slice(-8, -4) !== 'IEND' || width < 1 || height < 1 || width > 4096 || height > 4096 || width * height > 8_000_000) throw new Error('文献资料包的图解大小或 PNG 结构无效。')
+  return { url: input.url, width: Number(input.width), height: Number(input.height) }
+}
+
+function readTree(input: unknown, ids = new Map<string, string>(), depth = 0, images = { bytes: 0 }): { root: NodeData; ids: Map<string, string> } {
   if (depth > 50 || ids.size >= 20_000 || !record(input) || !text(input.id, 200) || !input.id || ids.has(input.id)
     || !text(input.title, 10_000) || !Array.isArray(input.children) || !text(input.note ?? '', 500_000)) throw new Error('文献资料包的节点结构无效。')
   const root = createNode(input.title)
   ids.set(input.id, root.id)
   root.note = String(input.note ?? '')
+  if (input.image !== undefined) root.image = readDiagram(input.image, images)
   if (input.hyperlink !== undefined) {
     if (!text(input.hyperlink, 4000) || !/^https?:\/\//i.test(input.hyperlink)) throw new Error('文献资料包含无效来源链接。')
     root.hyperlink = input.hyperlink
@@ -29,7 +45,7 @@ function readTree(input: unknown, ids = new Map<string, string>(), depth = 0): {
     root.tags = input.tags
   }
   root.collapsed = input.collapsed === true
-  root.children = input.children.map((child, index) => ({ ...readTree(child, ids, depth + 1).root, order: index }))
+  root.children = input.children.map((child, index) => ({ ...readTree(child, ids, depth + 1, images).root, order: index }))
   return { root, ids }
 }
 

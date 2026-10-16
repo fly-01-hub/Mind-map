@@ -1,7 +1,7 @@
 {
   "name": "siweidaotu",
   "private": true,
-  "version": "1.7.12",
+  "version": "1.7.13",
   "description": "本地优先的个人知识思维导图与论文阅读工具",
   "author": "fly-01-hub",
   "type": "module",

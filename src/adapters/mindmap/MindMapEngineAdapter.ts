@@ -449,6 +449,19 @@ export class MindMapEngineAdapter {
 
   getScale() { return this.engine.scaleVal }
 
+  actualSize() {
+    // A deep-link reveal may still be animating. Measuring that intermediate
+    // transform during the tree refresh can preserve an off-screen anchor.
+    this.engine.map.style.transition = 'none'
+    this.engine.scale(1)
+    this.engine.toCenter()
+    const rootId = this.engine.nodeData.id
+    requestAnimationFrame(() => {
+      if (!this.disposed && this.engine.nodeData.id === rootId) this.engine.toCenter()
+    })
+    return 1
+  }
+
   zoomBy(delta: number) {
     const next = Math.min(2, Math.max(.4, Math.round((this.engine.scaleVal + delta) * 10) / 10))
     this.engine.scale(next)
@@ -713,6 +726,17 @@ export class MindMapEngineAdapter {
     if (this.disposed) return
     for (const topic of topics) {
       const element = topic as Topic<EngineMetadata>
+      // Paragraphs need a readable line length at native zoom. Keep compact
+      // topics compact and let embedded diagrams use their authored width.
+      topic.classList.toggle('paragraph-topic', element.nodeObj.topic.length >= 160)
+      topic.classList.toggle('diagram-topic', Boolean(element.nodeObj.image))
+      topic.style.setProperty('--paragraph-font-weight', element.nodeObj.metadata?.style?.fontWeight || '400')
+      const raster = topic.querySelector<HTMLImageElement>(':scope > img')
+      if (raster && element.nodeObj.image) {
+        // Reserve the authored image ratio before decoding, so focus centering
+        // does not measure a zero-height image and leave the picture off-screen.
+        raster.style.aspectRatio = `${element.nodeObj.image.width} / ${element.nodeObj.image.height}`
+      }
       const richText = element.nodeObj?.metadata?.richText
       const text = topic.querySelector<HTMLElement>(':scope > .text')
       if (text) {

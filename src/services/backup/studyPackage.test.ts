@@ -7,10 +7,11 @@ import { importStudyPackage } from './studyPackage'
 
 const bytes = new TextEncoder().encode('%PDF-1.7\nresearch package test\n%%EOF')
 const digest = async () => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('')
-async function study(corrupt = false, badLink = false) {
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='
+async function study(corrupt = false, badLink = false, image?: unknown) {
   const zip = new JSZip()
   zip.file('manifest.json', JSON.stringify({ format: 'researchmind-study', version: 1, id: 'test-package', title: '球面调研',
-    root: { id: 'root', title: '球面调研', note: '调研笔记', children: [{ id: 'paper-node', title: '论文', children: [] }] },
+    root: { id: 'root', title: '球面调研', note: '调研笔记', image, children: [{ id: 'paper-node', title: '论文', children: [] }] },
     papers: [{ key: 'p1', title: 'Test paper', file: 'pdfs/test.pdf', bytes: bytes.length, pageCount: 1, sha256: await digest() }],
     links: [{ nodeId: badLink ? 'missing-node' : 'paper-node', paperKey: 'p1' }] }))
   zip.file('pdfs/test.pdf', corrupt ? new TextEncoder().encode('corrupt') : bytes)
@@ -21,6 +22,28 @@ beforeEach(async () => {
   await appDatabase.transaction('rw', appDatabase.tables, () => Promise.all(appDatabase.tables.map(table => table.clear())))
   const root = createNode('原有资料')
   await appDatabase.documents.add({ id: 'existing', title: root.title, root, version: 3, isFavorite: true, createdAt: root.createdAt, updatedAt: root.updatedAt })
+})
+
+it('preserves embedded PNG diagrams and rejects remote, active, malformed or oversized images before writes', async () => {
+  const image = { url: png, width: 720, height: 420 }
+  const imported = await importStudyPackage(await study(false, false, image))
+  expect((await appDatabase.documents.get(imported.documentId))?.root.image).toEqual(image)
+  const count = await appDatabase.documents.count()
+  for (const invalid of [
+    { ...image, url: 'https://example.com/diagram.png' },
+    { ...image, url: 'data:image/svg+xml;base64,PHN2Zy8+' },
+    { ...image, url: 'data:image/png;base64,AAAA' },
+    { ...image, url: 'data:image/png;base64,A' },
+    { ...image, width: 961 },
+    { ...image, height: 0 },
+  ]) await expect(importStudyPackage(await study(false, false, invalid))).rejects.toThrow('图解')
+  // A small encoded payload must not declare a huge decompressed raster.
+  const forged = Uint8Array.from(atob(png.split(',')[1]), c => c.charCodeAt(0))
+  forged.set([0, 1, 0, 0], 16)
+  const forgedUrl = 'data:image/png;base64,' + btoa(String.fromCharCode(...forged))
+  await expect(importStudyPackage(await study(false, false, { ...image, url: forgedUrl }))).rejects.toThrow('图解')
+  expect(await appDatabase.documents.count()).toBe(count)
+  expect(await appDatabase.papers.count()).toBe(1)
 })
 afterEach(() => vi.restoreAllMocks())
 

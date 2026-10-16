@@ -86,6 +86,7 @@ export function MapEditorPage() {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const handledNavigationRef = useRef('')
   const focusedNavigationRef = useRef('')
+  const readingFocusRef = useRef(false)
   const [engineReady, setEngineReady] = useState(false)
   const [nodeAnchor, setNodeAnchor] = useState<NodeAnchor>()
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -334,12 +335,23 @@ export function MapEditorPage() {
     const revealId = pendingRevealRef.current
     if (revealId) {
       pendingRevealRef.current = undefined
+      const scheduledFocus = focusRootId
       requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (useUiStore.getState().focusRootId !== scheduledFocus) return
         adapterRef.current?.reveal(revealId)
         setNodeAnchor(adapterRef.current?.anchorFor(revealId))
       }))
     }
   }, [document?.arrows, document?.summaries, engineReady, focusRootId, viewRoot, nameError])
+
+  useEffect(() => {
+    // Entering a topic is a reading action. A zoom fitted to the entire map
+    // can make even a single paragraph microscopic after focus navigation.
+    if (!engineReady) return
+    if (focusRootId) setCanvasScale(adapterRef.current?.actualSize() ?? 1)
+    else if (readingFocusRef.current) setCanvasScale(adapterRef.current?.fit() ?? 1)
+    readingFocusRef.current = Boolean(focusRootId)
+  }, [engineReady, focusRootId])
 
   useEffect(() => {
     if (!engineReady) return
@@ -364,18 +376,22 @@ export function MapEditorPage() {
   }, [engineReady, selectedNodeId, selectedNodeIds])
 
   useEffect(() => {
-    if (!engineReady || !viewRoot || !targetNodeId) return
+    if (!engineReady || !viewRoot || !targetNodeId || focusRootId) return
     const navigationKey = `${id ?? ''}:${targetNodeId}`
     if (focusedNavigationRef.current === navigationKey) return
     const path = getBreadcrumbs(viewRoot, targetNodeId)
     if (!path.length || path.slice(0, -1).some((node) => node.collapsed)) return
     focusedNavigationRef.current = navigationKey
-    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
-      adapterRef.current?.reveal(targetNodeId)
-      setNodeAnchor(adapterRef.current?.anchorFor(targetNodeId))
-    }))
-    return () => cancelAnimationFrame(frame)
-  }, [engineReady, id, targetNodeId, viewRoot])
+    let revealFrame = 0
+    const frame = requestAnimationFrame(() => {
+      revealFrame = requestAnimationFrame(() => {
+        if (useUiStore.getState().focusRootId) return
+        adapterRef.current?.reveal(targetNodeId)
+        setNodeAnchor(adapterRef.current?.anchorFor(targetNodeId))
+      })
+    })
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(revealFrame) }
+  }, [engineReady, id, targetNodeId, viewRoot, focusRootId])
 
   useEffect(() => {
     if (engineReady && editorView === 'mindmap') {
@@ -446,7 +462,7 @@ export function MapEditorPage() {
       case 'paste': editNewNode(store.paste(selection)); break
       case 'toggle': if (editorView === 'outline') store.toggleCollapsed(selection); else adapterRef.current?.toggleExpanded(selection); break
       case 'toggleSiblings': store.toggleSiblingChildren(selection); break
-      case 'focus': setFocusRoot(selection); break
+      case 'focus': setInspectorOpen(false); setFocusRoot(selection); break
       default: setInspectorOpen(true)
     }
   }, [editNewNode, editorView, moveSelectedSibling, presentationMode, readOnly, setFocusRoot, setInspectorOpen, setSelectedNode])
@@ -847,7 +863,7 @@ export function MapEditorPage() {
         </DropdownMenu.Root>
       </header>
       {paperPickerOpen && <div className="paper-picker"><strong>左侧论文 · 右侧导图</strong><p>把 PDF 文件直接拖到导图，即可创建文献节点。双击文献节点打开分栏。</p><button onClick={() => navigate('/annotations')}>论文与批注管理 →</button>{papers.map((paper) => <button key={paper.id} onClick={() => openPaper(paper.id)}>📄 {paper.title}</button>)}</div>}
-      {breadcrumbs.length > 0 && <div className="focus-breadcrumb"><Focus size={14} />{breadcrumbs.map((node, index) => <span key={node.id}><button onClick={() => index === 0 ? setFocusRoot(undefined) : setFocusRoot(node.id)}>{node.title}</button>{index < breadcrumbs.length - 1 && <ChevronRight size={13} />}</span>)}</div>}
+      {breadcrumbs.length > 0 && <div className="focus-breadcrumb"><Focus size={14} />{breadcrumbs.map((node, index) => <span key={node.id}><button title={node.title.split('\n')[0]} onClick={() => index === 0 ? setFocusRoot(undefined) : setFocusRoot(node.id)}>{node.title.split('\n')[0]}</button>{index < breadcrumbs.length - 1 && <ChevronRight size={13} />}</span>)}</div>}
       {searchOpen && <div className="editor-search-panel"><div className="editor-search"><Search size={16} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索节点、标签或笔记…" /><button className="icon-button" onClick={() => { setSearchOpen(false); setSearchQuery('') }}><X size={16} /></button></div>{searchQuery && <div className="editor-search-results">{searchResults.map((result) => <button key={result.nodeId} onClick={() => {
         useDocumentStore.getState().revealNode(result.nodeId)
         setSelectedNode(result.nodeId)
@@ -1183,7 +1199,7 @@ export function MapEditorPage() {
             <button onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布" aria-label="适应画布"><Maximize2 size={16} /></button>
             <i />
             <button onClick={() => setCanvasScale(adapterRef.current?.zoomBy(-.1) ?? canvasScale)} disabled={canvasScale <= .4} title="缩小" aria-label="缩小"><ZoomOut size={16} /></button>
-            <button className="canvas-scale" onClick={() => setCanvasScale(adapterRef.current?.fit() ?? 1)} title="适应画布">{Math.round(canvasScale * 100)}%</button>
+            <button className="canvas-scale" onClick={() => setCanvasScale(adapterRef.current?.actualSize() ?? 1)} title="恢复100%阅读大小">{Math.round(canvasScale * 100)}%</button>
             <button onClick={() => setCanvasScale(adapterRef.current?.zoomBy(.1) ?? canvasScale)} disabled={canvasScale >= 2} title="放大" aria-label="放大"><ZoomIn size={16} /></button>
             <i />
             <button onClick={() => useDocumentStore.getState().undo()} title="撤销（Ctrl + Z）" aria-label="撤销"><Undo2 size={16} /></button>
