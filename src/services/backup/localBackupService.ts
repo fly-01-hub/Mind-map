@@ -4,6 +4,7 @@ import type { AnnotationNodeRelation, PaperAnnotation } from '../../types/annota
 import type { DocumentVersion, FolderData, MindMapDocument } from '../../types/mindmap'
 import type { NodePaperRelation, Paper, PaperFileCache, PaperReadingState } from '../../types/paper'
 import Dexie, { type EntityTable } from 'dexie'
+import { createBinaryBackup, readBinaryBackup } from './largeBackupArchive'
 
 const BACKUP_FORMAT = 'researchmind-local-backup'
 const BACKUP_VERSION = 1
@@ -171,6 +172,8 @@ export async function createLocalBackup(current?: Pick<BackupTables, 'documents'
 }
 
 export async function backupFromRows(rows: LocalRows, format: BackupFormat = BACKUP_FORMAT): Promise<BackupFile> {
+  const binaryBytes = [...rows.attachmentBlobs, ...rows.paperFiles].reduce((sum, row) => sum + row.blob.size, 0)
+  if (binaryBytes >= 128 * 1024 * 1024) return createBinaryBackup(rows, format)
   const [attachmentBlobs, paperFiles] = await Promise.all([
     Promise.all(rows.attachmentBlobs.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
     Promise.all(rows.paperFiles.map(async ({ blob, ...row }) => ({ ...row, blob: await serializeBlob(blob) }))),
@@ -194,6 +197,8 @@ export async function backupFromRows(rows: LocalRows, format: BackupFormat = BAC
 }
 
 export async function readBackupRows(file: Blob, formats: BackupFormat[] = [BACKUP_FORMAT]) {
+  const header = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+  if (header[0] === 0x50 && header[1] === 0x4b && header[2] === 3 && header[3] === 4) return readBinaryBackup(file, formats, parseBackup)
   const payload = parseBackup(await file.text(), formats)
   if (payload.integrity && (payload.integrity.algorithm !== 'SHA-256' || payload.integrity.digest !== await backupDigest(payload))) {
     throw new Error('备份完整性校验失败，文件可能损坏或已被修改；原有资料未被替换。请使用其他备份文件。')
