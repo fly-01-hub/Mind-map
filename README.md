@@ -1,6 +1,6 @@
 # ResearchMind 枝间
 
-本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.14**，修复大量 PDF／附件完整备份时的单字符串容量限制，保留文献图解、段落节点布局及主题阅读缩放。公开下载发行仍为 1.7.11，未发布 1.7.12–1.7.14 安装包或安卓包。
+本地优先的思维导图、文档大纲与 PDF 阅读工具。当前源码版本 **1.7.15**，修复大型导图中长段落、富文本和图片改变节点尺寸后连线错位的问题，保留大容量备份、文献图解及主题阅读缩放。公开下载发行仍为 1.7.11，未发布 1.7.12–1.7.15 安装包或安卓包。
 
 [免费在线使用](https://fly-01-hub.github.io/Mind-map-download/) · [下载 Windows 安装包](https://github.com/fly-01-hub/Mind-map-download/releases/latest) · [服务器 / Harness 接手指南](docs/HARNESS_HANDOFF.md)。各自的资料保存在本机或浏览器中。发布维护见 [免费分发说明](docs/DISTRIBUTION.md)。
 

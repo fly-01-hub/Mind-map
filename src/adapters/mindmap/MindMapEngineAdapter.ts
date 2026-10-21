@@ -82,6 +82,10 @@ export class MindMapEngineAdapter {
   private textCache = new WeakMap<HTMLElement, { text: HTMLElement; key: string }>()
   private htmlCache = new Map<string, string>()
   private appearance = 'paper:false'
+  private connectorFrame = 0
+  private topicResize: ResizeObserver
+  private observedTopics = new Set<HTMLElement>()
+  private topicSizes = new WeakMap<Element, string>()
 
   setDocuments(documents: MindMapDocument[]) {
     this.documents = documents
@@ -119,6 +123,21 @@ export class MindMapEngineAdapter {
       overflowHidden: false,
       alignment: 'nodes',
       theme: mapThemes.paper,
+    })
+
+    // The engine draws before our paragraph/rich-text decoration. Its cached
+    // paths must follow the final DOM geometry, including asynchronous images
+    // and fonts. Observe border boxes, not zoomed screen coordinates: panning
+    // and zooming must not redraw every connector in a large map.
+    this.topicResize = new ResizeObserver((entries) => {
+      let changed = false
+      for (const entry of entries) {
+        const box = entry.borderBoxSize[0]
+        const size = `${box?.inlineSize ?? entry.contentRect.width}:${box?.blockSize ?? entry.contentRect.height}`
+        if (this.topicSizes.get(entry.target) !== size) changed = true
+        this.topicSizes.set(entry.target, size)
+      }
+      if (changed) this.scheduleConnectors()
     })
 
     // Engine pointer selection calls scrollIntoView and recentres edge topics.
@@ -225,6 +244,9 @@ export class MindMapEngineAdapter {
     this.stopEditVisibility?.()
     this.viewportResize.disconnect()
     cancelAnimationFrame(this.viewportResizeFrame)
+    cancelAnimationFrame(this.connectorFrame)
+    this.topicResize.disconnect()
+    this.observedTopics.clear()
     const editor = this.engine.nodes.querySelector<HTMLElement>('#input-box[contenteditable]')
     if (editor) clearWikiEditor(editor)
     this.disposed = true
@@ -681,6 +703,14 @@ export class MindMapEngineAdapter {
         if (topic.nodeObj.metadata) topic.nodeObj.metadata.richText = node.richText
         topics.push(topic)
       }
+      if (patch.insertion) {
+        const collect = (node: NodeData) => {
+          const topic = this.safeFind(node.id)
+          if (topic) topics.push(topic)
+          node.children.forEach(collect)
+        }
+        collect(patch.insertion.node)
+      }
       this.applyRichText(topics)
     } else this.applyRichText()
   }
@@ -724,7 +754,16 @@ export class MindMapEngineAdapter {
 
   private applyRichText(topics: Iterable<HTMLElement> = this.engine.nodes.querySelectorAll<HTMLElement>('.me-tpc')) {
     if (this.disposed) return
+    for (const topic of this.observedTopics) {
+      if (topic.isConnected) continue
+      this.topicResize.unobserve(topic)
+      this.observedTopics.delete(topic)
+    }
     for (const topic of topics) {
+      if (!this.observedTopics.has(topic)) {
+        this.observedTopics.add(topic)
+        this.topicResize.observe(topic, { box: 'border-box' })
+      }
       const element = topic as Topic<EngineMetadata>
       // Paragraphs need a readable line length at native zoom. Keep compact
       // topics compact and let embedded diagrams use their authored width.
@@ -774,6 +813,14 @@ export class MindMapEngineAdapter {
         topic.append(badge)
       }
     }
+  }
+
+  private scheduleConnectors() {
+    if (this.disposed || this.connectorFrame) return
+    this.connectorFrame = requestAnimationFrame(() => {
+      this.connectorFrame = 0
+      if (!this.disposed && this.engine.nodeData) this.engine.linkDiv()
+    })
   }
 
   private toEngineData(root: NodeData, arrows: MapArrow[], summaries: MapSummary[]): MindElixirData<EngineMetadata> {
