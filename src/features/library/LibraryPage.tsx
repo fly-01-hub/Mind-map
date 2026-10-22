@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   Archive, BookOpen, Clock3, FileText, Folder, FolderPlus, GitBranch, HardDrive, Heart,
   Download, LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Search, ShieldCheck,
-  Star, Tag, Trash2, Check, X,
+  Star, Tag, Trash2, Check, X, PanelsTopLeft,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -14,6 +14,7 @@ import type { FolderData, MindMapDocument, NodeData } from '../../types/mindmap'
 import { countNodes } from '../../utils/tree'
 import { BackupDialog } from '../backup/BackupDialog'
 import { isAndroidApp } from '../../services/platform/androidFiles'
+import { openDocumentWindow } from '../../services/platform/openDocumentWindow'
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -120,6 +121,8 @@ function DocumentRow({ document, folders, inTrash, open, viewMode = 'list' }: {
         <DropdownMenu.Item className="dropdown-item" onSelect={() => restoreDocument(document.id)}><RotateCcw size={15} />恢复</DropdownMenu.Item>
         <DropdownMenu.Item className="dropdown-item danger-item" onSelect={() => void permanentlyDelete()}><Trash2 size={15} />永久删除</DropdownMenu.Item>
       </> : <>
+        <DropdownMenu.Item className="dropdown-item" onSelect={() => openDocumentWindow(document.id)}><PanelsTopLeft size={15} />在新窗口打开</DropdownMenu.Item>
+        <DropdownMenu.Separator className="context-separator" />
         <DropdownMenu.Label className="dropdown-label">移动到文件夹</DropdownMenu.Label>
         {folders.filter((folder) => !folder.deletedAt).map((folder) => <DropdownMenu.Item key={folder.id} className="dropdown-item" onSelect={() => moveDocument(document.id, folder.id)}><Folder size={15} />{folder.name}</DropdownMenu.Item>)}
         <DropdownMenu.Separator className="context-separator" />
@@ -130,7 +133,7 @@ function DocumentRow({ document, folders, inTrash, open, viewMode = 'list' }: {
 
   if (viewMode === 'grid') return (
     <article className="document-card" role="button" tabIndex={0} draggable={!inTrash} onDragStart={(event) => event.dataTransfer.setData('application/x-zhijian-document', document.id)} onClick={() => !inTrash && open(document)} onKeyDown={(event) => event.key === 'Enter' && !inTrash && open(document)}>
-      <header><span className="document-card-icon"><FileText size={19} /></span><div className="document-card-actions">{!inTrash && <button className={`icon-button ${document.isFavorite ? 'is-favorite' : ''}`} aria-label="收藏" onClick={(event) => { event.stopPropagation(); toggleFavorite(document.id) }}><Star size={16} fill={document.isFavorite ? 'currentColor' : 'none'} /></button>}{menu()}</div></header>
+      <header><span className="document-card-icon"><FileText size={19} /></span><div className="document-card-actions">{!inTrash && <><button className="icon-button" aria-label={`在新窗口打开：${document.title}`} title="在新窗口打开，与其他导图同时使用" onClick={(event) => { event.stopPropagation(); openDocumentWindow(document.id) }}><PanelsTopLeft size={16} /></button><button className={`icon-button ${document.isFavorite ? 'is-favorite' : ''}`} aria-label="收藏" onClick={(event) => { event.stopPropagation(); toggleFavorite(document.id) }}><Star size={16} fill={document.isFavorite ? 'currentColor' : 'none'} /></button></>}{menu()}</div></header>
       <div className="document-card-body"><strong>{document.title}</strong><span><GitBranch size={13} />{countNodes(document.root)} 个节点</span></div>
       <footer><span className="folder-pill">{folderName}</span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(document.updatedAt))}</time></footer>
     </article>
@@ -142,6 +145,7 @@ function DocumentRow({ document, folders, inTrash, open, viewMode = 'list' }: {
       <div className="document-name"><strong>{document.title}</strong><span>{countNodes(document.root)} 个节点</span></div>
       <span className="folder-pill">{folderName}</span>
       <time>{new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(document.updatedAt))}</time>
+      {!inTrash && <button className="icon-button document-open-window" aria-label={`在新窗口打开：${document.title}`} title="在新窗口打开，与其他导图同时使用" onClick={(event) => { event.stopPropagation(); openDocumentWindow(document.id) }}><PanelsTopLeft size={17} /></button>}
       {!inTrash && <button className={`icon-button row-action ${document.isFavorite ? 'is-favorite' : ''}`} aria-label="收藏" onClick={(event) => { event.stopPropagation(); toggleFavorite(document.id) }}><Star size={17} fill={document.isFavorite ? 'currentColor' : 'none'} /></button>}
       {menu()}
     </div>

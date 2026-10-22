@@ -71,9 +71,9 @@ function makePatch(document: MindMapDocument, previous?: MindMapDocument): Docum
 }
 
 export class RecoveryJournal {
-  readonly key = JOURNAL_PREFIX + crypto.randomUUID()
+  readonly key: string
   private storage: Storage
-  constructor(storage: Storage) { this.storage = storage }
+  constructor(storage: Storage, key = JOURNAL_PREFIX + crypto.randomUUID()) { this.storage = storage; this.key = key }
 
   write(documents: MindMapDocument[], folders: FolderData[], baseline: Map<string, MindMapDocument>, previousFolders: FolderData[] | undefined, drafts: EditorDraft[]) {
     const pending = documents.filter((document) => baseline.get(document.id) !== document)
@@ -123,10 +123,10 @@ function matchesPatch(current: MindMapDocument, patch: Pick<DocumentPatch, 'docu
 
 // Pure recovery plan. Callers commit it atomically, then acknowledge its keys.
 // Newer database data is kept; conflicting edits become a separate document.
-export function planRecovery(storage: Storage, initialDocuments: MindMapDocument[], initialFolders: FolderData[]) {
+export function planRecovery(storage: Storage, initialDocuments: MindMapDocument[], initialFolders: FolderData[], liveKeys: ReadonlySet<string> = new Set()) {
   const documents = [...initialDocuments]
   let folders = initialFolders
-  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter((key): key is string => Boolean(key?.startsWith(JOURNAL_PREFIX)))
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter((key): key is string => Boolean(key?.startsWith(JOURNAL_PREFIX) && !liveKeys.has(key)))
   let recovered = 0
   let conflicts = 0
   for (const key of keys) {

@@ -18,8 +18,8 @@ export function StartupProtection() {
   const waiting = useDataSafetyStore((state) => state.waitingForWriter)
   if (!error && !waiting) return null
   return <main className="data-startup-protection" role="alert">
-    <h1>{waiting ? '此知识库已在另一个窗口打开' : '暂时无法安全打开知识库'}</h1>
-    <p>{waiting ? '为防止不同窗口相互覆盖，请关闭另一个 ResearchMind 窗口。这里会自动读取最新资料后继续。' : error}</p>
+    <h1>{waiting ? '正在连接本地知识库' : '暂时无法安全打开知识库'}</h1>
+    <p>{waiting ? '若长时间停留在此处，请关闭尚未更新的旧版枝间窗口。新版支持同时打开多份导图。' : error}</p>
     {!waiting && <><p>已停止编辑和自动写入，保留原有资料。请勿清除站点数据或卸载应用。</p><button className="primary-button" onClick={() => window.location.reload()}>重新读取</button><button className="secondary-button" onClick={() => { void exportRecoveryRecords().catch(() => window.alert('恢复记录导出失败，请保持此窗口打开。')) }}>导出恢复记录</button></>}
   </main>
 }

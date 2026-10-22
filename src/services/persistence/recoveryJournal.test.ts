@@ -12,6 +12,21 @@ function document(): MindMapDocument {
   return { id: crypto.randomUUID(), title: root.title, root, version: 1, createdAt: root.createdAt, updatedAt: root.updatedAt, isFavorite: false }
 }
 describe('write-ahead recovery', () => {
+  it('leaves another live window journal untouched and recovers it after that window exits', () => {
+    const original = document()
+    const storage = memoryStorage()
+    const folders: [] = []
+    const journal = new RecoveryJournal(storage)
+    const changed = { ...original, version: 2, root: { ...original.root, note: 'Live window draft' } }
+    journal.write([changed], folders, new Map([[original.id, original]]), folders, [])
+    const live = planRecovery(storage, [original], folders, new Set([journal.key]))
+    expect(live.documents).toEqual([original])
+    expect(live.keys).toEqual([])
+    expect(storage.getItem(journal.key)).not.toBeNull()
+    const abandoned = planRecovery(storage, [original], folders)
+    expect(abandoned.documents[0].root.note).toBe('Live window draft')
+    expect(abandoned.keys).toEqual([journal.key])
+  })
   it('recovers pending edits, insertion and deletion after interruption without changing the old tree', () => {
     const original = document()
     const root = removeSubtree(insertChild(mapNode(original.root, original.root.children[0].id, (node) => ({ ...node, note: 'unsaved note' })), original.root.id, createNode('added')), original.root.children[1].id)

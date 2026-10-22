@@ -100,6 +100,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .document-row > .row-action:nth-last-child(2) { position: absolute; right: 40px; color: #89938c; }
 .document-row > .row-action:last-child { position: absolute; right: 4px; }
 .document-row .is-favorite { color: #8a7653 !important; }
+.document-row > .document-open-window { position: absolute; right: 76px; color: #718779; }
+.document-row time { padding-right: 12px; }
+.document-row, .document-list-head { grid-template-columns: minmax(280px, 1fr) 125px 120px 116px; }
 .empty-state { height: 220px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #99a19c; }
 .empty-state strong { color: #627068; font-size: 14px; }
 .empty-state span { font-size: 12px; }
@@ -122,7 +125,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 /* Map editor */
 .editor-shell { height: 100vh; display: grid; grid-template-rows: 56px 1fr; grid-template-columns: 1fr; background: #f7f8f6; position: relative; }
 .editor-shell.with-inspector { grid-template-columns: minmax(480px, 1fr) 360px; }
-.editor-toolbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; padding: 0 16px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, .97); box-shadow: 0 1px 8px rgba(38, 51, 42, .035); z-index: 20; }
+.editor-toolbar { min-width: 0; grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; padding: 0 16px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, .97); box-shadow: 0 1px 8px rgba(38, 51, 42, .035); z-index: 20; }
 .editor-shell.presentation-mode { grid-template: 1fr / 1fr !important; background: #f8f9f7; }
 .presentation-mode .editor-toolbar, .presentation-mode .node-inspector, .presentation-mode .inspector-resizer, .presentation-mode .canvas-onboarding-tip { display: none; }
 .presentation-mode .mindmap-stage { grid-column: 1; grid-row: 1; }
@@ -152,6 +155,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sync-dot { width: 11px; height: 11px; border: 1.5px solid #b7c1ba; border-top-color: #56705f; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .toolbar-spacer { flex: 1; }
+.document-window-readonly { max-width: 132px; color: #967448; font-size: 10px; line-height: 1.4; }
+.multi-map-menu { width: 340px; max-width: 90vw; }
+.multi-map-search { display: flex; align-items: center; gap: 7px; margin: 5px 6px 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: #849087; }
+.multi-map-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12px; }
+.multi-map-options { max-height: 320px; overflow-y: auto; }
+.multi-map-options .dropdown-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.multi-map-hint, .multi-map-empty { margin: 8px 10px; color: #89938d; font-size: 11px; line-height: 1.6; }
 .mindmap-stage { grid-column: 1; grid-row: 2; min-width: 0; min-height: 0; overflow: hidden; position: relative; background-color: #f8f9f7; background-image: radial-gradient(#dfe4df 0.75px, transparent .75px); background-size: 22px 22px; }
 .mindmap-stage.is-panning, .mindmap-stage.is-panning * { cursor: grabbing !important; }
 .mindmap-stage.is-file-dragging::after { content: ''; position: absolute; inset: 10px; z-index: 22; pointer-events: none; border: 2px dashed #789280; border-radius: 13px; background: rgba(224, 235, 226, .18); }

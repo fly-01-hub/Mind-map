@@ -155,16 +155,16 @@ test('never offers an editable empty library after a failed database read', asyn
   await expect(page.getByText('测试导图甲', { exact: true })).toBeVisible()
 })
 
-test('coordinates two windows and reads the latest data when the first window closes', async ({ page, context }) => {
+test('opens a second window while protecting the same map and hands over its latest content', async ({ page, context }) => {
   await page.goto('/map/test-map')
   await page.getByRole('button', { name: '大纲', exact: true }).click()
   await page.locator('.outline-topic-input').nth(1).fill('Draft retained between windows')
   const second = await context.newPage()
-  await second.goto('/library')
-  await expect(second.getByRole('heading', { name: '此知识库已在另一个窗口打开' })).toBeVisible()
-  await page.close()
-  await expect(second.getByRole('button', { name: '新建思维导图' })).toBeVisible()
   await second.goto('/map/test-map')
+  await expect(second.getByLabel('文档名称', { exact: true })).toBeDisabled()
+  await expect(second.getByText('只读 · 等待其他窗口结束编辑')).toBeVisible()
+  await page.close()
+  await expect(second.getByLabel('文档名称', { exact: true })).toBeEnabled()
   await expect(second.locator('.outline-topic-input', { hasText: 'Draft retained between windows' })).toHaveCount(1)
 })
 

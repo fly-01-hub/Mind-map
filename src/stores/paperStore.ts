@@ -30,7 +30,7 @@ interface PaperState {
   updateArea: (id: string, position: AnnotationPositionData, preview: string, color?: AnnotationColor) => Promise<PaperAnnotation>
 }
 
-async function loadPaperData() {
+export async function loadPaperData() {
   const [papers, relations, annotations, annotationNodeRelations] = await Promise.all([
     paperRepository.listPapers(), paperRepository.listRelations(), paperRepository.listAnnotations(),
     appDatabase.annotationNodeRelations.filter((relation) => !relation.deletedAt).toArray(),

@@ -36,7 +36,9 @@ import { NodeSources } from '../paper/NodeSources'
 import { KnowledgeFeedback } from '../paper/knowledgeFeedback'
 import { knowledgeAction, useKnowledgeFeedbackStore } from '../../stores/knowledgeFeedbackStore'
 import { ANNOTATION_DRAG_TYPE, paperKnowledgeService, parseAnnotationReference } from '../../services/paper/paperKnowledgeService'
-import { flushLocalPersistence } from '../../services/persistence/localPersistence'
+import { flushLocalPersistence, watchDocumentEditing } from '../../services/persistence/localPersistence'
+import { useDataSafetyStore } from '../../stores/dataSafetyStore'
+import { MultiMapMenu } from './MultiMapMenu'
 import { findBacklinks, matchingDocuments, wikiLinkAtPoint } from '../../utils/wikiLinks'
 import { DocumentTitleInput } from '../documentLinks/DocumentTitleInput'
 import { DocumentLinks } from '../documentLinks/DocumentLinks'
@@ -100,7 +102,10 @@ export function MapEditorPage() {
   const [relationQuery, setRelationQuery] = useState('')
   const [movePickerOpen, setMovePickerOpen] = useState(false)
   const [moveQuery, setMoveQuery] = useState('')
-  const [readOnly, setReadOnly] = useState(false)
+  const [manualReadOnly, setReadOnly] = useState(false)
+  const editingDocumentId = useDataSafetyStore((state) => state.editingDocumentId)
+  const windowReadOnly = editingDocumentId !== id
+  const readOnly = manualReadOnly || windowReadOnly
   const [readingPaper, setReadingPaper] = useState<{ paperId: string; annotationId?: string; nodeId?: string; locationKey: number }>()
   const [paperPickerOpen, setPaperPickerOpen] = useState(false)
   const [presentationMode, setPresentationMode] = useState(false)
@@ -144,6 +149,11 @@ export function MapEditorPage() {
   const targetNodeId = searchParams.get('nodeId') ?? undefined
   const activeMapTheme = document?.mapTheme ?? 'paper'
   const compactMap = document?.compactMap ?? false
+  const editableDocumentId = document && !document.deletedAt ? document.id : undefined
+
+  useEffect(() => {
+    if (editableDocumentId && !manualReadOnly) return watchDocumentEditing(editableDocumentId)
+  }, [editableDocumentId, manualReadOnly])
 
   const viewRoot = useMemo(() => document && (focusRootId ? findNode(document.root, focusRootId) : document.root), [document, focusRootId])
   const selectedNode = document && selectedNodeId ? findNode(document.root, selectedNodeId) : undefined
@@ -297,6 +307,7 @@ export function MapEditorPage() {
         else useDocumentStore.getState().commitMap(root, arrows, summaries)
       },
     })
+    adapter.setReadOnly(readOnly || presentationMode)
     adapterRef.current = adapter
     let started = false
     const initTimer = window.setTimeout(() => {
@@ -814,6 +825,8 @@ export function MapEditorPage() {
           <button className={editorView === 'mindmap' ? 'active' : ''} onClick={() => changeEditorView('mindmap')} title="思维导图"><Network size={15} /><span>导图</span></button>
         </div>
         <div className="toolbar-spacer" />
+        <MultiMapMenu currentId={document.id} />
+        {windowReadOnly && !manualReadOnly && <span className="document-window-readonly" role="status" title="这份导图正在其他窗口编辑。本窗口可阅读并同步最新内容；另一个窗口关闭或返回知识库后，将自动接续编辑。">只读 · 等待其他窗口结束编辑</span>}
         {selectedNodeId && !readOnly && !presentationMode && <NodeOrderMenu root={document.root} nodeIds={selectedNodeIds} onMove={(action) => void moveSelectedSibling(action)} open={orderMenuOpen} onOpenChange={setOrderMenuOpen} />}
         <button className={`toolbar-action-button ${backlinksOpen && editorView === 'mindmap' ? 'active' : ''}`} aria-label="双向链接与反向引用" title="输入 [[文档名称]]，双击高亮文字打开文档" onClick={() => {
           if (editorView === 'outline') globalThis.document.querySelector('.outline-document .document-backlinks')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -849,7 +862,7 @@ export function MapEditorPage() {
               <DropdownMenu.RadioItem className="dropdown-item" value="mono" disabled={readOnly}><Palette size={16} />黑白灰</DropdownMenu.RadioItem>
             </DropdownMenu.RadioGroup>
             <DropdownMenu.CheckboxItem className="dropdown-item" checked={document.compactMap ?? false} disabled={readOnly} onCheckedChange={(compactMap) => updateMapAppearance(document.id, { mapTheme: document.mapTheme, compactMap })}><Maximize2 size={16} />紧凑布局</DropdownMenu.CheckboxItem>
-            <DropdownMenu.CheckboxItem className="dropdown-item" checked={readOnly} onCheckedChange={(value) => { setReadOnly(value); if (value) { setInspectorOpen(false); setRelationPickerOpen(false); setRelationSourceId(undefined) } }}><Eye size={16} />只读浏览</DropdownMenu.CheckboxItem>
+            <DropdownMenu.CheckboxItem className="dropdown-item" checked={manualReadOnly} onCheckedChange={(value) => { setReadOnly(value); if (value) { setInspectorOpen(false); setRelationPickerOpen(false); setRelationSourceId(undefined) } }}><Eye size={16} />只读浏览</DropdownMenu.CheckboxItem>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => { changeEditorView('mindmap'); setPresentationMode(true); setInspectorOpen(false) }}><Presentation size={16} />演示模式</DropdownMenu.Item>
             <DropdownMenu.Separator className="context-separator" />
             <DropdownMenu.Label className="dropdown-label">大纲显示</DropdownMenu.Label>
