@@ -54,6 +54,8 @@
 
 “备份与恢复 → 导出恢复前安全副本”可导出此前完整资料，再通过普通恢复流程找回。浏览器下载方式只提示已开始下载，要求确认文件完成；原生文件接口和文件选择器等待实际写入完成后才提示已保存。
 
+1.7.17 起，完整备份、部分导图备份、安全副本及恢复记录导出，在点击按钮时先打开保存位置选择器，再读取和打包资料。避免大容量资料整理超过浏览器临时用户激活有效期，导致 `showSaveFilePicker` 报“Must be handling a user gesture”。取消选择时不生成备份，文件写入失败时中止文件流并保留原错误；不支持该选择器的浏览器继续使用普通下载。
+
 ## 存储与限制
 
 主数据库仍为 `zhijian-knowledge-db`、schema v3。完整备份支持原v1 JSON与大容量v2 ZIP；后者使用`researchmind-binary-backup`清单，`sourceFormat`区分完整或部分备份，二进制逐文件校验。安全副本数据库为 `researchmind-safety-snapshots`，schema v1；恢复记录在同源 localStorage 的 `researchmind-recovery-v1:` 命名空间中，都是未加密的本机资料，不上传 GitHub。恢复记录只保护未确认的编辑差异，不是完整备份，也不适合直接导入普通恢复入口。

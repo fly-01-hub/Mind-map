@@ -269,25 +269,53 @@ interface SaveFilePickerWindow extends Window {
   }) => Promise<FileSystemFileHandle>
 }
 
-export async function saveBackupFile(backup: BackupFile) {
-  if (isAndroidApp()) { await saveAndroidFile(backup.blob, backup.fileName); return 'saved' as const }
+async function chooseBackupFile(fileName: string) {
+  // Native pickers must run directly from the click, before reading IndexedDB,
+  // hashing PDFs or creating the archive can expire transient user activation.
+  if (isAndroidApp() || navigator.userActivation?.isActive === false) return null
   const picker = (window as SaveFilePickerWindow).showSaveFilePicker
   if (picker) {
-    const handle = await picker({
-      suggestedName: backup.fileName,
-      types: [{ description: backup.fileName.endsWith('.rmpart') ? 'ResearchMind 部分导图备份' : 'ResearchMind 完整备份',
-        accept: { 'application/json': [backup.fileName.endsWith('.rmpart') ? '.rmpart' : '.researchmind'] } }],
+    const extension = fileName.endsWith('.rmpart') ? '.rmpart' : fileName.endsWith('.json') ? '.json' : '.researchmind'
+    return picker.call(window, {
+      suggestedName: fileName,
+      types: [{ description: extension === '.rmpart' ? 'ResearchMind 部分导图备份' : extension === '.json' ? 'ResearchMind 恢复记录' : 'ResearchMind 完整备份',
+        accept: { 'application/json': [extension] } }],
     })
+  }
+  return null
+}
+
+export const suggestedBackupName = (extension: '.researchmind' | '.rmpart' = '.researchmind') =>
+  `ResearchMind-${extension === '.rmpart' ? 'selected' : 'backup'}-${new Date().toISOString().replace(/[:.]/g, '-')}${extension}`
+
+export async function saveGeneratedBackup(create: () => Promise<BackupFile | undefined>, fileName = suggestedBackupName()) {
+  const destination = await chooseBackupFile(fileName)
+  const backup = await create()
+  if (!backup) return
+  return { backup, result: await saveBackupFile(backup, destination) }
+}
+
+export async function saveBackupFile(backup: BackupFile, destination?: FileSystemFileHandle | null) {
+  if (isAndroidApp()) { await saveAndroidFile(backup.blob, backup.fileName); return 'saved' as const }
+  const handle = destination === undefined ? await chooseBackupFile(backup.fileName) : destination
+  if (handle) {
     const writable = await handle.createWritable()
-    await writable.write(backup.blob)
-    await writable.close()
+    try {
+      await writable.write(backup.blob)
+      await writable.close()
+    } catch (error) {
+      await writable.abort().catch(() => undefined)
+      throw error
+    }
     return 'saved' as const
   }
   const url = URL.createObjectURL(backup.blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = backup.fileName
+  document.body.append(anchor)
   anchor.click()
+  anchor.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   return 'downloaded' as const
 }

@@ -1,16 +1,18 @@
 import { useDataSafetyStore } from '../../stores/dataSafetyStore'
 import { useSaveStore } from '../../stores/saveStore'
 import { JOURNAL_PREFIX } from '../../services/persistence/recoveryJournal'
+import { createLocalBackup, saveGeneratedBackup } from '../../services/backup/localBackupService'
 import './data-safety.css'
 
 async function exportRecoveryRecords() {
-  const records: Record<string, string | null> = {}
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key?.startsWith(JOURNAL_PREFIX)) records[key] = localStorage.getItem(key)
-  }
-  const { saveBackupFile } = await import('../../services/backup/localBackupService')
-  await saveBackupFile({ blob: new Blob([JSON.stringify(records)], { type: 'application/json' }), fileName: 'ResearchMind-recovery-records.json', exportedAt: new Date().toISOString(), itemCount: Object.keys(records).length })
+  await saveGeneratedBackup(async () => {
+    const records: Record<string, string | null> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(JOURNAL_PREFIX)) records[key] = localStorage.getItem(key)
+    }
+    return { blob: new Blob([JSON.stringify(records)], { type: 'application/json' }), fileName: 'ResearchMind-recovery-records.json', exportedAt: new Date().toISOString(), itemCount: Object.keys(records).length }
+  }, 'ResearchMind-recovery-records.json')
 }
 
 export function StartupProtection() {
@@ -30,12 +32,13 @@ export function DataSafetyNotice() {
   const failed = useSaveStore((state) => state.status === 'error')
   if (!notice && !journalError && !failed) return null
   const exportCurrent = async () => {
-    const { useDocumentStore } = await import('../../stores/documentStore')
-    const { createLocalBackup, saveBackupFile } = await import('../../services/backup/localBackupService')
-    const { prepareForNavigation } = await import('../../services/persistence/localPersistence')
-    await prepareForNavigation().catch(() => undefined)
-    const state = useDocumentStore.getState()
-    await saveBackupFile(await createLocalBackup({ documents: state.documents, folders: state.folders }))
+    await saveGeneratedBackup(async () => {
+      const { useDocumentStore } = await import('../../stores/documentStore')
+      const { prepareForNavigation } = await import('../../services/persistence/localPersistence')
+      await prepareForNavigation().catch(() => undefined)
+      const state = useDocumentStore.getState()
+      return createLocalBackup({ documents: state.documents, folders: state.folders })
+    })
   }
   return <aside className={`data-safety-notice ${failed || journalError ? 'is-error' : ''}`} role={failed || journalError ? 'alert' : 'status'}>
     <span>{failed ? '保存失败，当前编辑仍在内存或恢复记录中。请保持窗口打开，检查设备空间，并导出完整备份。' : journalError ?? notice}</span>

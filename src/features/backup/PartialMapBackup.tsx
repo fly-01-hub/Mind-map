@@ -1,7 +1,7 @@
 import { Download, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { createPartialBackup, importSelectedMaps, prepareMapImport, type PreparedMapImport } from '../../services/backup/partialBackupService'
-import { saveBackupFile } from '../../services/backup/localBackupService'
+import { saveGeneratedBackup, suggestedBackupName } from '../../services/backup/localBackupService'
 import { prepareForNavigation, replaceLocalKnowledgeBase } from '../../services/persistence/localPersistence'
 import { useDocumentStore } from '../../stores/documentStore'
 
@@ -32,11 +32,15 @@ export function PartialMapBackup({ busy, setBusy, setMessage }: {
     setBusy(true)
     try {
       if (mode === 'export') {
-        setMessage('正在整理所选导图及关联文件…')
-        await prepareForNavigation().catch(() => undefined)
-        const state = useDocumentStore.getState()
-        const backup = await createPartialBackup(selected, { documents: state.documents, folders: state.folders })
-        const result = await saveBackupFile(backup)
+        setMessage('请选择备份保存位置，随后将整理所选导图…')
+        const saved = await saveGeneratedBackup(async () => {
+          setMessage('正在整理所选导图及关联文件…')
+          await prepareForNavigation().catch(() => undefined)
+          const state = useDocumentStore.getState()
+          return createPartialBackup(selected, { documents: state.documents, folders: state.folders })
+        }, suggestedBackupName('.rmpart'))
+        if (!saved) return
+        const { result } = saved
         setMessage(result === 'saved' ? `已保存 ${selected.length} 份导图的部分备份。` : `${selected.length} 份导图的部分备份已开始下载，请确认文件保存完成。`)
       } else if (prepared) {
         setMessage('正在新增所选导图及关联文件…')
