@@ -39,6 +39,7 @@ import { ANNOTATION_DRAG_TYPE, paperKnowledgeService, parseAnnotationReference }
 import { flushLocalPersistence, watchDocumentEditing } from '../../services/persistence/localPersistence'
 import { useDataSafetyStore } from '../../stores/dataSafetyStore'
 import { MultiMapMenu } from './MultiMapMenu'
+import { DeviceSyncDialog } from '../sync/DeviceSyncDialog'
 import { findBacklinks, matchingDocuments, wikiLinkAtPoint } from '../../utils/wikiLinks'
 import { DocumentTitleInput } from '../documentLinks/DocumentTitleInput'
 import { DocumentLinks } from '../documentLinks/DocumentLinks'
@@ -826,6 +827,7 @@ export function MapEditorPage() {
         </div>
         <div className="toolbar-spacer" />
         <MultiMapMenu currentId={document.id} />
+        <DeviceSyncDialog />
         {windowReadOnly && !manualReadOnly && <span className="document-window-readonly" role="status" title="这份导图正在其他窗口编辑。本窗口可阅读并同步最新内容；另一个窗口关闭或返回知识库后，将自动接续编辑。">只读 · 等待其他窗口结束编辑</span>}
         {selectedNodeId && !readOnly && !presentationMode && <NodeOrderMenu root={document.root} nodeIds={selectedNodeIds} onMove={(action) => void moveSelectedSibling(action)} open={orderMenuOpen} onOpenChange={setOrderMenuOpen} />}
         <button className={`toolbar-action-button ${backlinksOpen && editorView === 'mindmap' ? 'active' : ''}`} aria-label="双向链接与反向引用" title="输入 [[文档名称]]，双击高亮文字打开文档" onClick={() => {

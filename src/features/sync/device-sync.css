@@ -1,0 +1,7 @@
+.device-sync-dialog { overflow-y: auto; }
+.device-sync-dialog .device-sync-field { display: flex; flex-direction: column; gap: 7px; margin: 16px 0; font-size: 13px; color: #405047; }
+.device-sync-field input { width: 100%; box-sizing: border-box; border: 1px solid #dce2dd; border-radius: 7px; padding: 10px; font: inherit; }
+.device-sync-automatic { display: flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.6; }
+.device-sync-dialog .device-sync-status { background: #eef5f0; padding: 12px; border-radius: 7px; color: #405d49; overflow-wrap: anywhere; }
+.device-sync-dialog .device-sync-error { color: #95421c; background: #fff5ee; padding: 12px; border-radius: 7px; overflow-wrap: anywhere; }
+.device-sync-dialog footer { flex-wrap: wrap; }

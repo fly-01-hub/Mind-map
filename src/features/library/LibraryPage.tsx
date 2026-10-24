@@ -13,6 +13,7 @@ import { useUserStore } from '../../stores/userStore'
 import type { FolderData, MindMapDocument, NodeData } from '../../types/mindmap'
 import { countNodes } from '../../utils/tree'
 import { BackupDialog } from '../backup/BackupDialog'
+import { DeviceSyncDialog } from '../sync/DeviceSyncDialog'
 import { isAndroidApp } from '../../services/platform/androidFiles'
 import { openDocumentWindow } from '../../services/platform/openDocumentWindow'
 
@@ -271,7 +272,7 @@ export function LibraryPage() {
         <div className="profile-chip"><span>{(user.name ?? '知').slice(0, 1)}</span><div><strong>{user.name ?? '本地用户'}</strong><small>{localStorageLabel}</small></div><HardDrive size={14} /></div>
       </aside>
       <main className="library-main">
-        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1><p className="library-subtitle">{subtitle}</p></div><div className="library-header-actions"><button className="secondary-button" onClick={() => navigate('/annotations')}><BookOpen size={16} />论文与批注</button>{installPrompt && <button className="secondary-button install-app-button" onClick={() => void installApp()} title="安装后可从桌面或开始菜单打开"><Download size={16} />安装到电脑</button>}<BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create} title="Ctrl + N"><Plus size={17} />新建思维导图</button>}</div></header>
+        <header className="library-header"><div><p className="eyebrow">知识库</p><h1>{heading}</h1><p className="library-subtitle">{subtitle}</p></div><div className="library-header-actions"><button className="secondary-button" onClick={() => navigate('/annotations')}><BookOpen size={16} />论文与批注</button>{installPrompt && <button className="secondary-button install-app-button" onClick={() => void installApp()} title="安装后可从桌面或开始菜单打开"><Download size={16} />安装到电脑</button>}<DeviceSyncDialog /><BackupDialog />{filter !== 'trash' && <button className="primary-button" onClick={create} title="Ctrl + N"><Plus size={17} />新建思维导图</button>}</div></header>
         <section className="library-overview" aria-label="知识库概览">
           <div><FileText size={17} /><span><strong>{activeDocuments.length}</strong> 份导图</span></div>
           <div><GitBranch size={17} /><span><strong>{totalNodeCount}</strong> 个节点</span></div>

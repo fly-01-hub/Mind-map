@@ -1,7 +1,7 @@
 {
   "name": "siweidaotu",
   "private": true,
-  "version": "1.7.17",
+  "version": "1.7.18",
   "description": "本地优先的个人知识思维导图与论文阅读工具",
   "author": "fly-01-hub",
   "type": "module",
@@ -34,7 +34,9 @@
     "desktop:unpacked": "npm run desktop:runtime && npm run build && electron-builder --win dir --x64",
     "android:prepare": "npm run build && node scripts/prepare-android.mjs",
     "android:test": "npm run build && playwright test --config playwright.android.config.ts",
-    "android:build": "npm run android:prepare && node scripts/build-android.mjs"
+    "android:build": "npm run android:prepare && node scripts/build-android.mjs",
+    "sync:serve": "node scripts/personal-sync-server.mjs",
+    "test:sync": "node --test tests/sync/server.test.mjs"
   },
   "dependencies": {
     "@mind-elixir/export-mindmap": "^0.1.10",

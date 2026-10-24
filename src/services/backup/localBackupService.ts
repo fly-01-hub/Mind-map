@@ -147,7 +147,7 @@ function parseBackup(text: string, formats: BackupFormat[] = [BACKUP_FORMAT]): L
   return value as unknown as LocalBackupPayload
 }
 
-async function readAllTables() {
+export async function readAllTables() {
   return appDatabase.transaction('r', appDatabase.tables, async () => {
     const [
       documents, folders, versions, attachmentBlobs, papers, paperFiles,

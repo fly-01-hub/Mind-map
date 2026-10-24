@@ -42,6 +42,7 @@ android/app/src/main/assets/web/
 *.aab
 *.researchmind
 /思维导图备份/
+/三设备同步/
 *.rmstudy
 *.rmpart
 ResearchMind-recovery-records*.json

@@ -8,6 +8,10 @@ import App from './App.tsx'
 import { useSaveStore } from './stores/saveStore'
 import { isAndroidApp, printAndroidPage } from './services/platform/androidFiles'
 import { useDataSafetyStore } from './stores/dataSafetyStore'
+import { capturePairingHint } from './services/sync/pairingHint'
+
+capturePairingHint()
+window.addEventListener('hashchange', capturePairingHint)
 
 if (isAndroidApp()) {
   document.documentElement.dataset.platform = 'android'
@@ -61,6 +65,8 @@ createRoot(document.getElementById('root')!).render(
 async function bootstrapData() {
   const { initializeLocalPersistence } = await import('./services/persistence/localPersistence')
   await initializeLocalPersistence()
+  const { startPersonalSync } = await import('./services/sync/personalSync')
+  startPersonalSync()
 }
 
 void bootstrapData().catch((error: unknown) => {
